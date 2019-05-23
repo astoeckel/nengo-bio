@@ -15,9 +15,11 @@
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
+import collections
 import numpy as np
 import cvxopt
 import scipy.optimize
+import multiprocessing
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ except:
     USE_MOSEK = False
 
 DEFAULT_TOL = 1e-6
-DEFAULT_REG = 1e-4
+DEFAULT_REG = 1e-1
 
 class CvxoptParamGuard:
     """
@@ -156,6 +158,90 @@ def solve_weights_qp(A,
         )
         return np.array(opt['x'])[:n_vars, 0]
 
+class SolverTask(collections.namedtuple('SolverTask', [
+        'Apre', 'Jpost', 'w', 'exc', 'inh', 'iTh', 'nonneg', 'renormalise',
+        'tol', 'reg', 'use_lstsq', 'valid', 'i', 'n_samples', 'Npre_exc'
+    ])):
+    pass
+
+def _solve_single(t):
+    # Renormalise the target currents to a maximum magnitude of one and adapt
+    # the model weights accordingly. Since it holds
+    #
+    #             w[0] + w[1] * gE + w[2] * gI
+    # J(gE, gI) = ---------------------------- ≈ Jpost
+    #             w[3] + w[4] * gE + w[5] * gI
+    #
+    # scaling the first three or last three weight vector components will scale
+    # the predicted target current. Scaling w[1], w[2], w[4], w[5] will re-scale
+    # the magnitude of the synaptic weights
+
+    # Determine the current scaling factor. This should be about 1e9 / A.
+    if t.renormalise:
+        # Determine all scaling factors
+        Wscale = 1.0e-9
+        Λscale = 1.0 / (t.w[1]**2
+                        )  # Need to scale the regularisation factor as well
+
+        # Compute synaptic weights in nS
+        t.w[[1, 2, 4, 5]] *= Wscale
+
+        # Set w[1]=1 for better numerical stability/conditioning
+        t.w[...] /= t.w[1]
+    else:
+        Wscale, Λscale = 1.0, 1.0
+
+    # Account for the number of samples
+    Λscale *= t.n_samples
+
+    # Demangle the model weight vector
+    a0, a1, a2, b0, b1, b2 = t.w
+
+    # Clip Jtar to the valid range.
+    if np.abs(b2) > 0 and np.abs(b1) > 0:
+        if (a1 / b1) < np.max(t.Jpost):
+            logger.warning(
+                "Desired target currents cannot be reached! Min. " +
+                "current: {:.3g}; Max. current: {:.3g}; Max. " +
+                "target current: {:3g}"
+            .format(a2 / b2, a1 / b1, np.max(t.Jpost)))
+        t.Jpost[...] = t.Jpost.clip(0.975 * a2 / b2, 0.975 * a1 / b1)
+
+    # Split the pre activities into neurons marked as excitatory,
+    # as well as neurons marked as inhibitory
+    Apre_exc, Apre_inh = t.Apre[:, t.exc], t.Apre[:, t.inh]
+
+    # Assemble the "A" and "b" matrices
+    A = np.concatenate((
+        np.diag(a1 - b1 * t.Jpost) @ Apre_exc,
+        np.diag(a2 - b2 * t.Jpost) @ Apre_inh,
+    ),  axis=1)
+    b = t.Jpost * b0 - a0
+
+    # Solve the least-squares problem, either using QP (including the
+    # sub-threshold inequality/"mask_negative") or the lstsq/nnls functions.
+    if not t.use_lstsq:
+        fws = solve_weights_qp(
+            A,
+            b,
+            valid=t.valid,
+            nonneg=t.nonneg,
+            iTh=t.iTh * b0 - a0,  # Transform iTh in the same way as the target currents
+            reg=t.reg * Λscale,
+            tol=t.tol)
+    else:
+        # Compute Γ and Υ
+        Γ = A.T @ A + t.reg * Λscale * np.eye(A.shape[1])
+        Υ = A.T @ b
+
+        # Solve for weights using NNLS
+        if t.nonneg:
+            fws = scipy.optimize.nnls(Γ, Υ, maxiter=10*t.n_samples)[0]
+        else:
+            fws = np.linalg.lstsq(Γ, Υ, rcond=None)[0]
+
+    return t.i, fws[:t.Npre_exc] * Wscale, fws[t.Npre_exc:] * Wscale
+
 
 def solve(Apre,
           Jpost,
@@ -178,7 +264,6 @@ def solve(Apre,
     m = Apre.shape[0]
     Npre = Apre.shape[1]
     Npost = Jpost.shape[1]
-    WE, WI = np.zeros((2, Npre, Npost))
 
     # Use an all-to-all connection if neuron_types is set to None
     if neuron_types is None:
@@ -199,99 +284,24 @@ def solve(Apre,
     else:
         assert ws.shape[0] == Npost and ws.shape[1] == 6, "Invalid model weight matrix shape"
 
-    # Mark all samples as "valid" if valid is None, otherwise select those with
-    # the
+    # Mark all samples as "valid" if valid is None, otherwise select those where
+    # the post-current is larger than the threshold current
     if iTh is None:
         valid = np.ones((m, Npost), dtype=np.bool)
         iTh = 0.0
     else:
         valid = Jpost >= iTh
 
-    # Iterate over each post-neuron individually and solve for weights
-    As, bs = [], []
-    for i_post in range(Npost):
-        # Renormalise the target currents to a maximum magnitude of one and adapt
-        # the model weights accordingly. Since it holds
-        #
-        #             w[0] + w[1] * gE + w[2] * gI
-        # J(gE, gI) = ---------------------------- ≈ Jpost
-        #             w[3] + w[4] * gE + w[5] * gI
-        #
-        # scaling the first three or last three weight vector components will scale
-        # the predicted target current. Scaling w[1], w[2], w[4], w[5] will re-scale
-        # the magnitude of the synaptic weights
+    # Iterate over each post-neuron individually and solve for weights. Do so
+    # in parallel.
+    tasks = [SolverTask(
+        Apre, Jpost[:, i], ws[i], exc, inh, iTh,
+        nonneg, renormalise, tol, reg, use_lstsq,
+        valid[:, i], i, m, Npre_exc) for i in range(Npost)]
+    WE, WI = np.zeros((2, Npre, Npost))
+    pool = multiprocessing.Pool(multiprocessing.cpu_count() // 2)
+    for i, we, wi in pool.imap_unordered(_solve_single, tasks):
+        WE[exc, i], WI[inh, i] = we, wi
 
-        # Fetch the model weights for this neuron. Copy, so changes to ws do
-        # not affect the outside of this function.
-        w = np.copy(ws[i_post])
-
-        # Determine the current scaling factor. This should be about 1e9 / A.
-        if renormalise:
-            # Determine all scaling factors
-            Wscale = 1.0e-9
-            Λscale = 1.0 / (w[1]**2
-                            )  # Need to scale the regularisation factor as well
-
-            # Compute synaptic weights in nS
-            w[[1, 2, 4, 5]] *= Wscale
-
-            # Set w[1]=1 for better numerical stability/conditioning
-            w /= w[1]
-        else:
-            Wscale, Λscale = 1.0, 1.0
-
-        # Account for the number of samples
-        Λscale *= m
-
-        # Demangle the model weight vector
-        a0, a1, a2, b0, b1, b2 = w
-
-        # Clip Jtar to the valid range.
-        Jpost_cpy = np.copy(Jpost[:, i_post])
-        if np.abs(b2) > 0 and np.abs(b1) > 0:
-            if (a1 / b1) < np.max(Jpost_cpy):
-                logger.warning(
-                    "Desired target currents cannot be reached! Min. " +
-                    "current: {:.3g}; Max. current: {:.3g}; Max. " +
-                    "target current: {:3g}"
-                .format(a2 / b2, a1 / b1, np.max(Jpost_cpy)))
-            Jpost_cpy = Jpost_cpy.clip(0.975 * a2 / b2, 0.975 * a1 / b1)
-
-        # Split the pre activities into neurons marked as excitatory,
-        # as well as neurons marked as inhibitory
-        Apre_exc, Apre_inh = Apre[:, exc], Apre[:, inh]
-
-        # Assemble the "A" and "b" matrices
-        A = np.concatenate((
-            np.diag(a1 - b1 * Jpost_cpy) @ Apre_exc,
-            np.diag(a2 - b2 * Jpost_cpy) @ Apre_inh,
-        ),  axis=1)
-        b = Jpost_cpy * b0 - a0
-
-        # Solve the least-squares problem, either using QP (including the
-        # sub-threshold inequality/"mask_negative") or the lstsq/nnls functions.
-        if not use_lstsq:
-            fws = solve_weights_qp(
-                A,
-                b,
-                valid=valid[:, i_post],
-                nonneg=nonneg,
-                iTh=iTh * b0 - a0,  # Transform iTh in the same way as the target currents
-                reg=reg * Λscale,
-                tol=tol)
-        else:
-            # Compute Γ and Υ
-            Γ = A.T @ A + reg * Λscale * np.eye(A.shape[1])
-            Υ = A.T @ b
-
-            # Solve for weights using NNLS
-            if nonneg:
-                fws = scipy.optimize.nnls(Γ, Υ, maxiter=10*m)[0]
-            else:
-                fws = np.linalg.lstsq(Γ, Υ, rcond=None)[0]
-
-        WE[exc, i_post] = fws[:Npre_exc]
-        WI[inh, i_post] = fws[Npre_exc:]
-
-    return WE * Wscale, WI * Wscale
+    return WE, WI
 
