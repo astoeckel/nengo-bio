@@ -51,3 +51,4 @@ class QPSolver(nengo.solvers.Solver):
     def __call__(self, A, Y, rng=np.random):
         assert False, "This method should never be called directly"
 
+
