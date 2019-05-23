@@ -16,6 +16,7 @@
 
 import numpy as np
 
+from nengo.params import BoolParam, NumberParam
 from nengo.solvers import Solver
 from nengo_bio.internal import qp_solver
 
@@ -48,9 +49,24 @@ class SolverWrapper(ExtendedSolver):
 
 
 class QPSolver(ExtendedSolver):
+
+    reg = NumberParam('reg', low=0)
+    relax = BoolParam('relax')
+
+    def __init__(self, reg=1e-3, relax=False):
+        self.reg = reg
+        self.relax = relax
+
     def __call__(self, A, J, synapse_types, rng=np.random):
+        # Neuron model parameters. For now we only support current-based LIF
         ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
-        reg = (0.01 * np.max(A))**2 * A.shape[1]
-        return qp_solver.solve(A, J, ws,
-            synapse_types, iTh=1.0, reg=reg, use_lstsq=True)
+
+        # Determine the final regularisatio nparameter
+        reg = (self.reg * np.max(A))**2 * A.shape[1]
+
+        # If subthreshold relaxation is switched off, set the spike threshold
+        # to "None"
+        iTh = None if not self.relax else 1.0
+
+        return qp_solver.solve(A, J, ws, synapse_types, iTh=iTh, reg=reg)
 

@@ -21,6 +21,7 @@ from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 
 import nengo.builder
 
+# TODO: Do not override original BuiltConnection
 class BuiltConnection:
     def __init__(self):
         self.weights = {
@@ -49,8 +50,10 @@ def remove_bias_current(model, ens):
 @nengo.builder.Builder.register(ExtendedSolver)
 def build_solver(model, solver, _, rng):
     # Fetch the high-level connection
-    conn = solver.connection
+    conn = solver.connection # Note: this is the nengo_bio.Connection object
+                             # and NOT the nengo.Connection object
 
+    # If the high-level connection object has not been built, build it
     if not conn in model.params:
         ### TODO: Move to build_connection
         model.params[conn] = built_connection = BuiltConnection()

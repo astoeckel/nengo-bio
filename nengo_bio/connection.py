@@ -151,7 +151,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                 return nengo.connection.Connection(
                     pre=pre_,
                     post=self.post,
-                    transform=np.zeros((self.post.size_in, pre_.size_out)),
+                    transform=np.ones((self.post.size_in, pre_.size_out)) * (-1 if synapse_type is Inhibitory else 1),
                     seed=self.seed,
                     synapse=synapse,
                     solver=SolverWrapper(self.solver, i, self, synapse_type))
