@@ -16,8 +16,8 @@
 
 import numpy as np
 
-from .common import Excitatory, Inhibitory
-from .solvers import ExtendedSolver, QPSolver
+from nengo_bio.common import Excitatory, Inhibitory
+from nengo_bio.solvers import SolverWrapper, QPSolver
 
 import nengo.base
 import nengo.config
@@ -73,32 +73,22 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
             for pre_ in conn.pre_obj:
                 if not isinstance(pre_, nengo.ensemble.Ensemble):
                     raise ValidationError(
-                        "function can only be set for connections from an Ensemble"
-                        "(got type %r)" % type_pre,
+                        "function can only be set for connections from an " +
+                        " Ensemble (got type %r)" % type_pre,
                         attr=self.name, obj=conn)
 
+
 class Connection(nengo.config.SupportDefaultsMixin):
-
-    class SolverWrapper(ExtendedSolver):
-        # The SolverWrapper class is used to append more information to t
-
-        def __init__(self, solver, pre_idx, connection, synapse_type):
-            super().__init__()
-            self.solver = solver
-            self.pre_idx = pre_idx
-            self.connection = connection
-            self.synapse_type = synapse_type
-
-        def __call__(self, A, J, neuron_types, rng=np.random):
-            return self.solver(A, J, neuron_types, rng)
 
     label = nengo.params.StringParam(
         'label', default=None, optional=True)
     seed = nengo.params.IntParam(
         'seed', default=None, optional=True)
 
-    pre = PreParam('pre')
-    post = nengo.connection.PrePostParam('post', nonzero_size_in=True)
+    pre = PreParam(
+        'pre')
+    post = nengo.connection.PrePostParam(
+        'post', nonzero_size_in=True)
 
     synapse_exc = nengo.connection.SynapseParam(
         'synapse_exc', default=nengo.synapses.Lowpass(tau=0.005))
@@ -111,13 +101,16 @@ class Connection(nengo.config.SupportDefaultsMixin):
     transform = nengo.connection.ConnectionTransformParam(
         'transform', default=1.0)
 
-    solver = nengo.solvers.SolverParam('solver', default=QPSolver())
+    solver = nengo.solvers.SolverParam(
+        'solver', default=QPSolver())
 
     eval_points = nengo.connection.EvalPointsParam(
         'eval_points', default=None, optional=True, 
         sample_shape=('*', 'size_in'))
     scale_eval_points = nengo.params.BoolParam(
         'scale_eval_points', default=True)
+    decode_bias = nengo.params.BoolParam(
+        'decode_bias', default=True)
 
     _param_init_order = [
         'pre', 'post', 'synapse_exc', 'synapse_inh', 'function_info'
@@ -131,6 +124,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  solver=nengo.params.Default,
                  eval_points=nengo.params.Default,
                  scale_eval_points=nengo.params.Default,
+                 decode_bias=nengo.params.Default,
                  label=nengo.params.Default,
                  seed=nengo.params.Default):
         super().__init__()
@@ -142,6 +136,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.synapse_inh = synapse_inh
         self.eval_points = eval_points
         self.scale_eval_points = scale_eval_points
+        self.decode_bias = decode_bias
         self.pre = pre
         self.post = post
         self.function_info = function
@@ -159,7 +154,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                     transform=np.zeros((self.post.size_in, pre_.size_out)),
                     seed=self.seed,
                     synapse=synapse,
-                    solver=Connection.SolverWrapper(self.solver, i, self, synapse_type))
+                    solver=SolverWrapper(self.solver, i, self, synapse_type))
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))

@@ -17,7 +17,7 @@
 import numpy as np
 
 from nengo_bio.common import Excitatory, Inhibitory
-from nengo_bio.solvers import ExtendedSolver
+from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 
 import nengo.builder
 
@@ -56,7 +56,8 @@ def build_solver(model, solver, _, rng):
         model.params[conn] = built_connection = BuiltConnection()
 
         # Remove the bias current from the target ensemble
-        #remove_bias_current(model, conn.post_obj)
+        if conn.decode_bias:
+            remove_bias_current(model, conn.post_obj)
 
         # For each pre-ensemble, fetch the evaluation points and the activities
         d0, d1, n0, n1 = 0, 0, 0, 0
@@ -124,7 +125,9 @@ def build_solver(model, solver, _, rng):
         bias = built_post_ens.bias
 
         # Compute the target currents (gains are rolled into the encoders)
-        target_currents = (targets @ encoders.T) * gain #+ bias
+        target_currents = (targets @ encoders.T) * gain
+        if conn.decode_bias:
+            target_currents += bias
 
         # LIF neuron model parameters
         WE, WI = solver(activities, target_currents, synapse_types, rng)

@@ -34,6 +34,19 @@ class ExtendedSolver(Solver):
     def __call__(self, A, J, synapse_types, rng=np.random):
         raise NotImplementedError("Solvers must implement '__call__'")
 
+
+class SolverWrapper(ExtendedSolver):
+    def __init__(self, solver, pre_idx, connection, synapse_type):
+        super().__init__()
+        self.solver = solver
+        self.pre_idx = pre_idx
+        self.connection = connection
+        self.synapse_type = synapse_type
+
+    def __call__(self, A, J, neuron_types, rng=np.random):
+        return self.solver(A, J, neuron_types, rng)
+
+
 class QPSolver(ExtendedSolver):
     def __call__(self, A, J, synapse_types, rng=np.random):
         ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
