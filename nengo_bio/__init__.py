@@ -14,5 +14,8 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .connection import Connection
-from .ensemble import Ensemble
+from nengo_bio.connection import Connection
+from nengo_bio.ensemble import Ensemble
+
+# Implicitly register the builder components
+import nengo_bio.builder as builder

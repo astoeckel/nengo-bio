@@ -16,9 +16,8 @@
 
 import numpy as np
 
-from .solvers import QPSolver
 from .common import Excitatory, Inhibitory
-from .qp_solver import solve
+from .solvers import ExtendedSolver, QPSolver
 
 import nengo.base
 import nengo.config
@@ -80,6 +79,19 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
 
 class Connection(nengo.config.SupportDefaultsMixin):
 
+    class SolverWrapper(ExtendedSolver):
+        # The SolverWrapper class is used to append more information to t
+
+        def __init__(self, solver, pre_idx, connection, synapse_type):
+            super().__init__()
+            self.solver = solver
+            self.pre_idx = pre_idx
+            self.connection = connection
+            self.synapse_type = synapse_type
+
+        def __call__(self, A, J, neuron_types, rng=np.random):
+            return self.solver(A, J, neuron_types, rng)
+
     label = nengo.params.StringParam(
         'label', default=None, optional=True)
     seed = nengo.params.IntParam(
@@ -99,6 +111,8 @@ class Connection(nengo.config.SupportDefaultsMixin):
     transform = nengo.connection.ConnectionTransformParam(
         'transform', default=1.0)
 
+    solver = nengo.solvers.SolverParam('solver', default=QPSolver())
+
     eval_points = nengo.connection.EvalPointsParam(
         'eval_points', default=None, optional=True, 
         sample_shape=('*', 'size_in'))
@@ -114,6 +128,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  synapse_inh=nengo.params.Default,
                  function=nengo.params.Default,
                  transform=nengo.params.Default,
+                 solver=nengo.params.Default,
                  eval_points=nengo.params.Default,
                  scale_eval_points=nengo.params.Default,
                  label=nengo.params.Default,
@@ -123,37 +138,31 @@ class Connection(nengo.config.SupportDefaultsMixin):
         # Copy the parameters
         self.label = label
         self.seed = seed
-        self.pre = pre
-        self.post = post
         self.synapse_exc = synapse_exc
         self.synapse_inh = synapse_inh
-        self.function_info = function
         self.eval_points = eval_points
         self.scale_eval_points = scale_eval_points
+        self.pre = pre
+        self.post = post
+        self.function_info = function
         self.transform = transform
+        self.solver = solver
 
         # For each pre object add two actual nengo connections: an excitatory
         # path and an inhibitory path
         self.connections = []
         for i, pre_ in enumerate(self.pre):
-            def mkcon(neuron_type, synapse):
+            def mkcon(synapse_type, synapse):
                 return nengo.connection.Connection(
                     pre=pre_,
                     post=self.post,
                     transform=np.zeros((self.post.size_in, pre_.size_out)),
                     seed=self.seed,
                     synapse=synapse,
-                    solver=QPSolver(
-                        pre=self.pre,
-                        pre_idx=i,
-                        post=self.post,
-                        connection=self,
-                        neuron_type=neuron_type
-                    ))
+                    solver=Connection.SolverWrapper(self.solver, i, self, synapse_type))
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))
-
 
     def __str__(self):
         return "<ArbourConnection {}>".format(self._str)
@@ -223,134 +232,3 @@ class Connection(nengo.config.SupportDefaultsMixin):
     def size_out(self):
         return self.post.size_in
 
-
-class BuiltConnection:
-
-    def __init__(self):
-        self.weights = {
-            Excitatory: None,
-            Inhibitory: None
-        }
-        self.pre_idx_dim_map = []
-        self.pre_idx_neurons_map = []
-
-def remove_bias_current(model, ens):
-    sig_post_bias = model.sig[ens.neurons]['bias']
-    sig_post_in = model.sig[ens.neurons]['in']
-    for i, op in enumerate(model.operators):
-        if isinstance(op, nengo.builder.operator.Copy):
-            if (op.src is sig_post_bias) and (op.dst is sig_post_in):
-                del model.operators[i]
-                return True
-    return False
-
-@nengo.builder.Builder.register(QPSolver)
-def build_solver(model, solver, _, rng):
-    # Fetch the high-level connection
-    conn = solver.connection
-
-    if not conn in model.params:
-        ### TODO: Move to build_connection
-        model.params[conn] = built_connection = BuiltConnection()
-
-        # Remove the bias current from the target ensemble
-        #remove_bias_current(model, conn.post_obj)
-
-        # For each pre-ensemble, fetch the evaluation points and the activities
-        d0, d1, n0, n1 = 0, 0, 0, 0
-
-        N = len(conn.pre)
-        eval_points_list = [None] * N
-        activities_list = [None] * N
-        pre_idx_dim_map = [(0, 0)] * N
-        pre_idx_neurons_map = [(0, 0)] * N
-        neuron_types = {
-            Excitatory: [],
-            Inhibitory: []
-        }
-
-        for pre_idx, pre_ in enumerate(conn.pre):
-            d0, d1, n0, n1 = d1, d1 + pre_.size_out, n1, n1 + pre_.neurons.size_out
-            if conn.eval_points is None:
-                eval_points = model.params[pre_].eval_points.view()
-                eval_points.setflags(write=False)
-            else:
-                eval_points = conn.eval_points[d0:d1]
-
-            built_pre_ens = model.params[pre_]
-            neuron_types[Excitatory].append(
-                built_pre_ens.neuron_types[Excitatory])
-            neuron_types[Inhibitory].append(
-                built_pre_ens.neuron_types[Inhibitory])
-
-            activities = nengo.builder.ensemble.get_activities(
-                model.params[pre_], pre_, eval_points)
-
-            eval_points_list[pre_idx] = eval_points
-            activities_list[pre_idx] = activities
-            pre_idx_dim_map[pre_idx] = (d0, d1)
-            pre_idx_neurons_map[pre_idx] = (n0, n1)
-
-        # Make sure each pre-population has the same number of evaluation points
-        if len(set(map(lambda x: x.shape[0], eval_points))) > 1:
-            raise nengo.exceptions.BuildError(
-                "The number of evaluation points must be the same for all " +
-                "pre-objects in connection {}".format(conn))
-
-        # Build the evaluation points and activities encompassing all source
-        # ensembles
-        eval_points = np.concatenate(eval_points_list, axis=1)
-        activities = np.concatenate(activities_list, axis=1)
-        neuron_types = np.array((
-            np.concatenate(neuron_types[Excitatory]),
-            np.concatenate(neuron_types[Inhibitory])), dtype=np.bool)
-
-        # Fetch the target values in representation space
-        targets = nengo.builder.connection.get_targets(conn, eval_points)
-
-        # Transform the target values
-        if not isinstance(conn.transform, nengo.connection.Dense):
-            raise nengo.exceptions.BuildError(
-                "Non-compositional solvers only work with Dense transforms")
-        transform = conn.transform.sample(rng=rng)
-        targets = np.dot(targets, transform.T)
-
-        # For the target population, fetch the gains and biases
-        built_post_ens = model.params[conn.post_obj]
-        encoders = built_post_ens.encoders
-        gain = built_post_ens.gain
-        bias = built_post_ens.bias
-
-        # Compute the target currents (gains are rolled into the encoders)
-        target_currents = (targets @ encoders.T) * gain #+ bias
-
-        # LIF neuron model parameters
-        ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
-        reg = (0.01 * np.max(activities))**2 * activities.shape[1]
-#        WE, WI = solve(
-#            activities, target_currents, ws, neuron_types, iTh=1.0,
-#            reg=reg, use_lstsq=False)
-        WE, WI = solve(
-            activities, target_currents, ws, neuron_types, iTh=1.0,
-            reg=reg, use_lstsq=True)
-
-#        A = activities.T @ activities + np.eye(activities.shape[1]) * reg
-#        b = activities.T @ target_currents
-#        weights = np.linalg.lstsq(A, b, rcond=None)[0]
-#        WE, WI = np.clip(weights, 0, None), -np.clip(weights, None, 0)
-
-        built_connection.weights[Excitatory] =  WE
-        built_connection.weights[Inhibitory] = -WI
-        built_connection.pre_idx_dim_map = pre_idx_dim_map
-        built_connection.pre_idx_neurons_map = pre_idx_neurons_map
-    else:
-        built_connection = model.params[conn]
-
-    n_neurons_pre = solver.pre[solver.pre_idx].neurons.size_out
-    n_neurons_post = solver.post.neurons.size_in
-
-    bc = built_connection
-    n0, n1 = bc.pre_idx_neurons_map[solver.pre_idx]
-    W = np.copy(bc.weights[solver.neuron_type][n0:n1].T)
-
-    return None, W, None

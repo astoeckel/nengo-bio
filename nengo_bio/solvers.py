@@ -16,29 +16,28 @@
 
 import numpy as np
 
-import time
-import nengo.solvers
-import nengo.params
-import nengo.builder
+from nengo.solvers import Solver
+from nengo_bio.internal import qp_solver
 
-class QPSolver(nengo.solvers.Solver):
+class ExtendedSolver(Solver):
     """
-    The QPSolver class is a stub that is attached to the excitatory and
-    inhibitory connections bridging two ensembles.
+    Extended solver class used by nengo_bio. Passes neuron types and target
+    currents to the solver routine. Always solves for a full weight matrix.
+    Non-compositional.
     """
 
     compositional = False
 
-    def __init__(self, pre, pre_idx, post, connection, neuron_type):
+    def __init__(self):
         super().__init__(weights=True)
-        self.pre = pre
-        self.pre_idx = pre_idx
-        self.post = post
-        self.connection = connection
-        self.neuron_type = neuron_type
-        self.model = None
 
-    def __call__(self, A, Y, rng=np.random):
-        assert False, "This method should never be called directly"
+    def __call__(self, A, J, synapse_types, rng=np.random):
+        raise NotImplementedError("Solvers must implement '__call__'")
 
+class QPSolver(ExtendedSolver):
+    def __call__(self, A, J, synapse_types, rng=np.random):
+        ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
+        reg = (0.01 * np.max(A))**2 * A.shape[1]
+        return qp_solver.solve(A, J, ws,
+            synapse_types, iTh=1.0, reg=reg, use_lstsq=True)
 

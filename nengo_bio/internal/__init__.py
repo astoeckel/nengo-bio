@@ -14,18 +14,3 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-class SynapseType:
-    """
-    The SynapseType class can be used to mark neurons as either excitatory or
-    inhibitory.
-    """
-
-    def __init__(self, name):
-        self.name = name
-
-    def __repr__(self):
-        return self.name
-
-Excitatory = SynapseType("Excitatory")
-Inhibitory = SynapseType("Inhibitory")
-

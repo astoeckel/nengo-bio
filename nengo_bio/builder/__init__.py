@@ -14,22 +14,7 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-def steal_param(target, param_name, kw_args, default=None):
-    """
-    Helper function used to extract additional keyword arguments passed to
-    complex parent class constructors.
-
-    target: object to which an attribute with the name 'param_name' will
-        be added.
-    param_name: name of the parameter that will be removed from the kw_args
-        and the attribute that will be added to the target object.
-    kw_args: dictionary from which the key 'param_name' will be removed if it
-        exists.
-    """
-
-    if param_name in kw_args:
-        setattr(target, param_name, kw_args[param_name])
-        del kw_args[param_name]
-    else:
-        setattr(target, param_name, default)
-
+# Explicitly load all the sub-modules to register the builder components
+import nengo_bio.builder.connection as connection
+import nengo_bio.builder.ensemble as ensemble
+import nengo_bio.builder.solvers as solvers
