@@ -14,31 +14,18 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import numpy as np
-
-import time
-import nengo.solvers
-import nengo.params
-import nengo.builder
-
-class QPSolver(nengo.solvers.Solver):
+class NeuronType:
     """
-    The QPSolver class is a stub that is attached to the excitatory and
-    inhibitory connections bridging two ensembles.
+    The WeightType class can be used to mark neurons as either excitatory or
+    inhibitory.
     """
 
-    compositional = False
+    def __init__(self, name):
+        self.name = name
 
-    def __init__(self, pre, pre_idx, post, connection, neuron_type):
-        super().__init__(weights=True)
-        self.pre = pre
-        self.pre_idx = pre_idx
-        self.post = post
-        self.connection = connection
-        self.neuron_type = neuron_type
-        self.model = None
+    def __repr__(self):
+        return self.name
 
-    def __call__(self, A, Y, rng=np.random):
-        assert False, "This method should never be called directly"
-
+Excitatory = NeuronType("Excitatory")
+Inhibitory = NeuronType("Inhibitory")
 

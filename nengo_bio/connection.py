@@ -16,7 +16,8 @@
 
 import numpy as np
 
-from .solvers import Excitatory, Inhibitory, QPSolver
+from .solvers import QPSolver
+from .common import Excitatory, Inhibitory
 from .qp_solver import solve
 
 import nengo.base
@@ -135,7 +136,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         # path and an inhibitory path
         self.connections = []
         for i, pre_ in enumerate(self.pre):
-            def build_connection(weight_type, synapse):
+            def mkcon(neuron_type, synapse):
                 return nengo.connection.Connection(
                     pre=pre_,
                     post=self.post,
@@ -147,11 +148,11 @@ class Connection(nengo.config.SupportDefaultsMixin):
                         pre_idx=i,
                         post=self.post,
                         connection=self,
-                        weight_type=weight_type
+                        neuron_type=neuron_type
                     ))
             self.connections.append((
-                build_connection(Excitatory, synapse_exc),
-                build_connection(Inhibitory, synapse_inh)))
+                mkcon(Excitatory, synapse_exc),
+                mkcon(Inhibitory, synapse_inh)))
 
 
     def __str__(self):
@@ -325,7 +326,18 @@ def build_solver(model, solver, _, rng):
 
         # LIF neuron model parameters
         ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
-        WE, WI = solve(activities, target_currents, ws, neuron_types, reg=0.1 * np.max(activities), )
+        reg = (0.01 * np.max(activities))**2 * activities.shape[1]
+#        WE, WI = solve(
+#            activities, target_currents, ws, neuron_types, iTh=1.0,
+#            reg=reg, use_lstsq=False)
+        WE, WI = solve(
+            activities, target_currents, ws, neuron_types, iTh=1.0,
+            reg=reg, use_lstsq=True)
+
+#        A = activities.T @ activities + np.eye(activities.shape[1]) * reg
+#        b = activities.T @ target_currents
+#        weights = np.linalg.lstsq(A, b, rcond=None)[0]
+#        WE, WI = np.clip(weights, 0, None), -np.clip(weights, None, 0)
 
         built_connection.weights[Excitatory] =  WE
         built_connection.weights[Inhibitory] = -WI
@@ -339,6 +351,6 @@ def build_solver(model, solver, _, rng):
 
     bc = built_connection
     n0, n1 = bc.pre_idx_neurons_map[solver.pre_idx]
-    W = np.copy(bc.weights[solver.weight_type][n0:n1].T)
+    W = np.copy(bc.weights[solver.neuron_type][n0:n1].T)
 
     return None, W, None

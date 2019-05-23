@@ -18,7 +18,7 @@ import numpy as np
 import collections
 
 from .utils import *
-from .solvers import Excitatory, Inhibitory
+from .common import Excitatory, Inhibitory
 
 from nengo.exceptions import BuildError
 
