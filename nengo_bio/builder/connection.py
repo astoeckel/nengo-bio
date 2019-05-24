@@ -83,7 +83,7 @@ def build_solver(model, solver, _, rng):
                 eval_points = model.params[pre_].eval_points.view()
                 eval_points.setflags(write=False)
             else:
-                eval_points = conn.eval_points[d0:d1]
+                eval_points = conn.eval_points[:, d0:d1]
 
             built_pre_ens = model.params[pre_]
             synapse_types[Excitatory].append(
