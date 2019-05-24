@@ -299,9 +299,9 @@ def solve(Apre,
         nonneg, renormalise, tol, reg, use_lstsq,
         valid[:, i], i, m, Npre_exc) for i in range(Npost)]
     WE, WI = np.zeros((2, Npre, Npost))
-    pool = multiprocessing.Pool(multiprocessing.cpu_count() // 2)
-    for i, we, wi in pool.imap_unordered(_solve_single, tasks):
-        WE[exc, i], WI[inh, i] = we, wi
+    with multiprocessing.Pool(multiprocessing.cpu_count() // 2) as pool:
+        for i, we, wi in pool.imap_unordered(_solve_single, tasks):
+            WE[exc, i], WI[inh, i] = we, wi
 
     return WE, WI
 
