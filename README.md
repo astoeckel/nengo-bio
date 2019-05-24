@@ -1,5 +1,4 @@
-# NengoBio
-## Extensions facilitating the description of biological constraints in Nengo networks
+# NengoBio -- Extensions for biologically (more) plausible Nengo networks
 
 **Warning:** This project (including its name) is work-in progress and things are still subject to change.
 
