@@ -22,6 +22,7 @@ from nengo_bio.solvers import SolverWrapper, QPSolver
 import nengo.base
 import nengo.config
 import nengo.connection
+import nengo.dists
 import nengo.exceptions
 import nengo.params
 import nengo.synapses
@@ -104,7 +105,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
     solver = nengo.solvers.SolverParam(
         'solver', default=QPSolver())
 
-    eval_points = nengo.connection.EvalPointsParam(
+    eval_points = nengo.dists.DistOrArrayParam(
         'eval_points', default=None, optional=True, 
         sample_shape=('*', 'size_in'))
     scale_eval_points = nengo.params.BoolParam(
@@ -132,13 +133,13 @@ class Connection(nengo.config.SupportDefaultsMixin):
         # Copy the parameters
         self.label = label
         self.seed = seed
+        self.pre = pre
+        self.post = post
         self.synapse_exc = synapse_exc
         self.synapse_inh = synapse_inh
         self.eval_points = eval_points
         self.scale_eval_points = scale_eval_points
         self.decode_bias = decode_bias
-        self.pre = pre
-        self.post = post
         self.function_info = function
         self.transform = transform
         self.solver = solver
