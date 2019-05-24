@@ -8,13 +8,13 @@
 *NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator and description language. Nengo is used to construct detailed models of neurobiological systems. Nengo, as well as the underlying NEF, have some restrictions that can be seen as limitations on their biological plausibility. *NengoBio* lifts some of these restrictions by implementing the following:
 
 * Support distinction between excitatory and inhibitory neurons (Dale's Principle) (*Fully implemented*)
-* Elimination of the bias current
+* Elimination of the bias current (*Fully implemented*)
 * Support for dendritic computation (*Partially implemented*)
 * Support for conductance-based synapses as well as neurons with arbitrary passive dendritic trees (*Planned*)
 
 ## Installing NengoBio
 
-**Dependencies:** NengoBio requires Python 3. You'll need to install the following PyPI packages using `pip`
+**Dependencies:** *NengoBio* requires Python 3 and depends on `numpy>=1.16.3`, `scipy>=1.2.0`, `cvxopt>=1.2.2`, `nengo>=3.0.0.dev0`.
 
 Clone this repository by running
 ```bash
