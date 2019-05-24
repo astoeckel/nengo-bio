@@ -37,7 +37,9 @@ def remove_bias_current(model, ens):
     for i, op in enumerate(model.operators):
         if isinstance(op, nengo.builder.operator.Copy):
             if (op.src is sig_post_bias) and (op.dst is sig_post_in):
+                # Delete the copy operator and instead add a reset operator
                 del model.operators[i]
+                model.add_op((nengo.builder.operator.Reset(sig_post_in)))
                 return True
     return False
 
@@ -47,7 +49,7 @@ def remove_bias_current(model, ens):
 #    # Build the connection
 #    nengo.builder.connection.build_connection(model, conn)
 
-@nengo.builder.Builder.register(ExtendedSolver)
+@nengo.builder.Builder.register(SolverWrapper)
 def build_solver(model, solver, _, rng):
     # Fetch the high-level connection
     conn = solver.connection # Note: this is the nengo_bio.Connection object
@@ -127,13 +129,18 @@ def build_solver(model, solver, _, rng):
         gain = built_post_ens.gain
         bias = built_post_ens.bias
 
-        # Compute the target currents (gains are rolled into the encoders)
+        # Compute the target currents
         target_currents = (targets @ encoders.T) * gain
         if conn.decode_bias:
             target_currents += bias
 
         # LIF neuron model parameters
         WE, WI = solver(activities, target_currents, synapse_types, rng)
+
+#        RMS = np.sqrt(np.mean(np.square(target_currents)))
+#        RMSE = np.sqrt(np.mean(np.square(target_currents -
+#               (activities @ WE - activities @ WI))))
+#        print(conn.label, RMS, RMSE / RMS, np.mean(WE + WI))
 
         built_connection.weights[Excitatory] =  WE
         built_connection.weights[Inhibitory] = -WI
