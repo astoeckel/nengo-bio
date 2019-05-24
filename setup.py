@@ -32,5 +32,12 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering',
-    ])
+    ],
+    install_requires=[
+        "cvxopt>=1.2.2",
+        "nengo>=3.0.0.dev0",
+        "numpy>=1.16.3",
+        "scipy>=1.2.0",
+    ],
+)
 
