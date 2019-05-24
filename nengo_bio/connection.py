@@ -29,8 +29,8 @@ import nengo.builder
 
 class PreParam(nengo.params.Parameter):
     """
-    The PreParam class is used by arbour.Connection to describe the list of
-    pre-objects that are involved in a certain connection.
+    The PreParam class is used by nengo_bio.Connection to describe the list
+    of pre-objects that are involved in a certain connection.
     """
 
     def __init__(self, name):
