@@ -41,7 +41,7 @@ The `bio.Ensemble` class acts like a normal Nengo ensemble but has two additiona
 
 **Note:** Neurons will be assigned a synapse type at build time. If any of `p_exc` or `p_inh` is set, each neuron will either be excitatory or inhibitory. Without `p_exc` and `p_inh`, the ensemble will behave just like a normal Nengo ensemble.
 
-**Warning:** `bio.Ensemble` can be used in conjunction with the normal `nengo.Connection` class. The excitatory/inhibitory nature of the neurons in a `bio.Ensemble` will only be taken into account when using `bio.Connection`.
+**Warning:** `bio.Ensemble` can be used in conjunction with the normal `nengo.Connection` class. The excitatory/inhibitory nature of the neurons in a `bio.Ensemble` will only be taken into account when using `bio.Connection` (see below).
 
 ### Examples
 
