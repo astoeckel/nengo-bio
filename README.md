@@ -88,7 +88,7 @@ bio.Connection((ens_a, ens_b), ens_c, function=lambda x: np.mean(x))
 
 The techniques used in this library are described in more detail in this arXiv preprint: https://arxiv.org/abs/1904.11713. We would appreciate it if you could cite this paper in case you use this library in a published model.
 
-```bibtex
+```bib
 @misc{stoeckel2019passive,
     author = {Andreas Stöckel and Chris Eliasmith},
     title = {Passive nonlinear dendritic interactions as a general computational resource in functional spiking neural networks},
