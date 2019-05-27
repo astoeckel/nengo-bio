@@ -104,7 +104,7 @@ The techniques used in this library are described in more detail in this arXiv p
 ## License
 
 ```
-nengo_bio Extensions to Nengo for more biological plausibility
+nengo_bio -- Extensions to Nengo for more biological plausibility
 Copyright (C) 2019  Andreas Stöckel
 
 This program is free software: you can redistribute it and/or modify
