@@ -61,7 +61,7 @@ ens_mix = bio.Ensemble(n_neurons=101, dimensions=1, p_inh=0.2)
 
 A `bio.Connection` connection connects *n*-pre ensembles to a single target ensemble. It will automatically account for the synapse type assigned to each neuron.
 
-**Notable Parameters:**
+### Notable Parameters
 
 * `pre`: This can be either a single pre-population or a tuple of pre-populations. The dimensions of the values represented by the pre-populations will be stacked.
 
