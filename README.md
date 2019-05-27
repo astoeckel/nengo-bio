@@ -29,7 +29,7 @@ This will automatically install all dependencies. Note that *NengoBio* currently
 
 ## Using NengoBio
 
-Using *NengoBio* is quite simple if you know how to use the original Nengo. Just add the following to your set of imports
+Assuming that you know how to use Nengo, using *NengoBio* should be quite simple. Just add the following to your list of imports
 ```py
 import nengo_bio as bio
 ```
