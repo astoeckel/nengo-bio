@@ -18,11 +18,11 @@
 **Dependencies:** *NengoBio* requires Python 3 and depends on `numpy>=1.16.3`, `scipy>=1.2.0`, `cvxopt>=1.2.2`, `nengo>=3.0.0.dev0`.
 
 Clone this repository by running
-```bash
+```sh
 git clone https://github.com/astoeckel/nengo_bio
 ```
 You can then install the package by running the following inside the `nengo_bio` repository
-```bash
+```sh
 pip3 install -e .
 ```
 This will automatically install all dependencies. Note that *NengoBio* currently requires the most recent development version of *Nengo*, which has to be installed separately.
@@ -30,7 +30,7 @@ This will automatically install all dependencies. Note that *NengoBio* currently
 ## Using NengoBio
 
 Using *NengoBio* is quite simple if you know how to use the original Nengo. Just add the following to your set of imports
-```
+```py
 import nengo_bio as bio
 ```
 and replace `nengo.Ensemble` with `bio.Ensemble` and `nengo.Connection` with `bio.Connection` where applicable.
@@ -88,7 +88,7 @@ bio.Connection((ens_a, ens_b), ens_c, function=lambda x: np.mean(x))
 
 The techniques used in this library are described in more detail in this arXiv preprint: https://arxiv.org/abs/1904.11713. We would appreciate it if you could cite this paper in case you use this library in a published model.
 
-```
+```bibtex
 @misc{stoeckel2019passive,
     author = {Andreas Stöckel and Chris Eliasmith},
     title = {Passive nonlinear dendritic interactions as a general computational resource in functional spiking neural networks},
