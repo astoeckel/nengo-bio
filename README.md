@@ -1,4 +1,4 @@
-# NengoBio ‒ Biologically plausible Nengo models
+# NengoBio ‒ Biologically (more) plausible Nengo models
 
 > **⚠ Warning:** This project is work-in progress. Everything described here, including the name of the project and the API, is subject to change.
 
