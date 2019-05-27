@@ -11,7 +11,7 @@
 * **Support for dendritic computation** (*Partially implemented*)<br>
   Dendritic nonlinearities play a key role in information processing in central nervous systems and can be systematically exploited to perfrom nonlinear, multivariate computations. *NengoBio* adds support for dendritic computation to Nengo by allowing an arbitrary number of neuron ensembles as pre-objects in a connection.
 * **Support for conductance-based synapses as well as neurons with arbitrary passive dendritic trees** (*Planned*)
-  Dendritic computation relies on nonlinear effects in the virtual dendritic tree. *NengoBio* adds support for arbitrary passive multicompartment neuron models to Nengo.
+  Dendritic computation relies on nonlinear effects in the dendritic tree and the specific tree topology. *NengoBio* adds support for arbitrary passive multicompartment neuron models to Nengo.
 
 ## Installing NengoBio
 
