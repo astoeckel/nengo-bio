@@ -99,7 +99,7 @@ The techniques used in this library are described in more detail in this arXiv p
 }
 ```
 
-### License
+## License
 
 ```
 nengo_bio Extensions to Nengo for more biological plausibility
