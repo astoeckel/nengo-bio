@@ -2,7 +2,7 @@
 
 > **⚠ Warning:** This project is work-in progress. Everything described here, including the name of the project and the API, is subject to change.
 
-*NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator. Nengo is used by scientists to construct detailed models of neurobiological systems. However, Nengo (and to some degree the underlying [Neural Engineering Framework](http://compneuro.uwaterloo.ca/research/nef.html)), has restrictions that limit the biological plausibility of the created networks. *NengoBio* lifts some of these restrictions by implementing the following:
+*NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator. Nengo is used by scientists to construct detailed models of neurobiological systems. However, Nengo and, to some degree, the underlying [Neural Engineering Framework](http://compneuro.uwaterloo.ca/research/nef.html), have restrictions that limit the biological plausibility of the created networks. *NengoBio* lifts some of these restrictions by implementing the following:
 
 * **Dale's Principle** (:ballot_box_with_check: *Fully implemented*)<br>
   While it is possible to work around this limitation, Nengo usually does not explicitly mark neurons as excitatory or inhibitory. This means that they can connect to post-neurons excitatorily and inhibitorily, depending on the results of the weight solver. *NengoBio* marks neurons as either excitatory or inhibitory and accounts for this while solving for connection weights.
