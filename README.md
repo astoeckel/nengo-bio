@@ -1,8 +1,6 @@
-# NengoBio ‒ Extensions for biologically plausible Nengo models
+# NengoBio ‒ Biologically plausible Nengo models
 
-**⚠ Warning:** This project is work-in progress. Everything described here, including the name of the project and the API, is subject to change.
-
-## What is NengoBio?
+> **⚠ Warning:** This project is work-in progress. Everything described here, including the name of the project and the API, is subject to change.
 
 *NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator. Nengo is used by scientists to construct detailed models of neurobiological systems. Unfortunately, Nengo, as well as the underlying [Neuural Engineering Framework](http://compneuro.uwaterloo.ca/research/nef.html), have some restrictions that can be seen as limiting the biological plausibility of the created networks.
 
