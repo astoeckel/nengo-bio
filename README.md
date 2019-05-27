@@ -10,7 +10,7 @@
 
 * **Natively mark neurons as either excitatory or inhibitory (Dale's Principle)** (:ballot_box_with_check: *Fully implemented*)<br>
   While it is possible to work around this limitation, Nengo usually does not explicitly mark neurons as excitatory or inhibitory. This means that they can connect to post-neurons excitatorily and inhibitorily, depending on the results of the weight solver. *NengoBio* marks neurons as either excitatory or inhibitory and accounts for this while solving for connection weights.
-* **Elimination of the bias current** (:ballot_box_with_check: *Fully implemented*)<br>
+* **Bias current elimination** (:ballot_box_with_check: *Fully implemented*)<br>
   The Neural Engineering Framework assumes that each neuron has a constant bias current being fed into it. This bias current is used to diversify the avilable neuron tuning curves, yet is a little unrealistic from a biological perspective. *NengoBio* eliminates the bias current by solving for synaptic weights in current space, effectively decoding the bias current from the state of the pre-population.
 * **Support for dendritic computation** (*Partially implemented*)<br>
   Dendritic nonlinearities play a central role in information processing in central nervous systems and can be systematically exploited to perfrom nonlinear, multivariate computations. *NengoBio* adds support for dendritic computation to Nengo by allowing an arbitrary number of neuron ensembles as pre-objects in a connection.
