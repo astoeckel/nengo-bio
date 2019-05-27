@@ -2,14 +2,14 @@
 
 > **⚠ Warning:** This project is work-in progress. Everything described here, including the name of the project and the API, is subject to change.
 
-*NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator. Nengo is used by scientists to construct detailed models of neurobiological systems. However, Nengo, as well as the underlying [Neuural Engineering Framework](http://compneuro.uwaterloo.ca/research/nef.html), have some restrictions that can be seen as limiting the biological plausibility of the created networks. *NengoBio* lifts some of these restrictions by implementing the following:
+*NengoBio* is an add-on library for the [Nengo](https://nengo.ai/) spiking neural network simulator. Nengo is used by scientists to construct detailed models of neurobiological systems. However, Nengo (and to some degree the underlying [Neural Engineering Framework](http://compneuro.uwaterloo.ca/research/nef.html)), has restrictions that limit the biological plausibility of the created networks. *NengoBio* lifts some of these restrictions by implementing the following:
 
 * **Dale's Principle** (:ballot_box_with_check: *Fully implemented*)<br>
   While it is possible to work around this limitation, Nengo usually does not explicitly mark neurons as excitatory or inhibitory. This means that they can connect to post-neurons excitatorily and inhibitorily, depending on the results of the weight solver. *NengoBio* marks neurons as either excitatory or inhibitory and accounts for this while solving for connection weights.
 * **Bias current elimination** (:ballot_box_with_check: *Fully implemented*)<br>
-  The Neural Engineering Framework assumes that each neuron has a constant bias current being fed into it. This bias current is used to diversify the avilable neuron tuning curves, yet is a little unrealistic from a biological perspective. *NengoBio* eliminates the bias current by solving for synaptic weights in current space, effectively decoding the bias current from the state of the pre-population.
+  The Neural Engineering Framework assumes that each neuron is connected to a constant bias current source. This bias current is used to diversify the avilable neuron tuning curves, yet is a little unrealistic from a biological perspective. *NengoBio* eliminates the bias current by solving for synaptic weights in current space, effectively decoding the bias current from the pre-population state.
 * **Support for dendritic computation** (*Partially implemented*)<br>
-  Dendritic nonlinearities play a central role in information processing in central nervous systems and can be systematically exploited to perfrom nonlinear, multivariate computations. *NengoBio* adds support for dendritic computation to Nengo by allowing an arbitrary number of neuron ensembles as pre-objects in a connection.
+  Dendritic nonlinearities play a key role in information processing in central nervous systems and can be systematically exploited to perfrom nonlinear, multivariate computations. *NengoBio* adds support for dendritic computation to Nengo by allowing an arbitrary number of neuron ensembles as pre-objects in a connection.
 * **Support for conductance-based synapses as well as neurons with arbitrary passive dendritic trees** (*Planned*)
   Dendritic computation relies on nonlinear effects in the virtual dendritic tree. *NengoBio* adds support for arbitrary passive multicompartment neuron models to Nengo.
 
