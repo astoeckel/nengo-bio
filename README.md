@@ -41,17 +41,17 @@ The `bio.Ensemble` class acts like a normal Nengo ensemble but has two additiona
 
 **Note:** Neurons will be assigned a synapse type at build time. If any of `p_exc` or `p_inh` is set, each neuron will either be excitatory or inhibitory. Without `p_exc` and `p_inh`, the ensemble will behave just like a normal Nengo ensemble.
 
-**Example:** An ensemble exclusively consisting of excitatory neurons
+### Examples
+
+**Examples 1:** An ensemble exclusively consisting of excitatory neurons
 ```py
 ens_exc = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=1.0)
 ```
-
-**Example:** An ensemble exclusively consisting of inhibitory neurons
+**Examples 2:** An ensemble exclusively consisting of inhibitory neurons
 ```py
 ens_inh = bio.Ensemble(n_neurons=101, dimensions=1, p_inh=1.0)
 ```
-
-**Example:** An ensemble consisting of 80% excitatory and 20% inhibitory neurons (both lines are equivalent):
+**Examples 3:** An ensemble consisting of 80% excitatory and 20% inhibitory neurons (both lines are equivalent):
 ```py
 ens_mix = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=0.8)
 ens_mix = bio.Ensemble(n_neurons=101, dimensions=1, p_inh=0.2)
