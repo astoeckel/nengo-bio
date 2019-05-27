@@ -8,12 +8,14 @@
 
  *NengoBio* lifts some of these restrictions by implementing the following:
 
-* **Natively mark neurons as either excitatory or inhibitory (Dale's Principle)** (✅ *Fully implemented*)<br>
+* **Natively mark neurons as either excitatory or inhibitory (Dale's Principle)** (:ballot_box_with_check: *Fully implemented*)<br>
   While it is possible to work around this limitation, Nengo usually does not explicitly mark neurons as excitatory or inhibitory. This means that they can connect to post-neurons excitatorily and inhibitorily, depending on the results of the weight solver. *NengoBio* marks neurons as either excitatory or inhibitory and accounts for this while solving for connection weights.
-* **Elimination of the bias current** (✅ *Fully implemented*)<br>
-  The Neural Engineering Framework assumes that each neuron has a constant bias current that is being fed into it. This is biologically questionable. *NengoBio* eliminates the bias current by solving for weights in current space, including the bias current.
-* Support for dendritic computation (*Partially implemented*)
-* Support for conductance-based synapses as well as neurons with arbitrary passive dendritic trees (*Planned*)
+* **Elimination of the bias current** (:ballot_box_with_check: *Fully implemented*)<br>
+  The Neural Engineering Framework assumes that each neuron has a constant bias current being fed into it. This bias current is used to diversify the avilable neuron tuning curves, yet is a little unrealistic from a biological perspective. *NengoBio* eliminates the bias current by solving for synaptic weights in current space, effectively decoding the bias current from the state of the pre-population.
+* **Support for dendritic computation** (*Partially implemented*)<br>
+  Dendritic nonlinearities play a central role in information processing in central nervous systems and can be systematically exploited to perfrom nonlinear, multivariate computations. *NengoBio* adds support for dendritic computation to Nengo by allowing an arbitrary number of neuron ensembles as pre-objects in a connection.
+* **Support for conductance-based synapses as well as neurons with arbitrary passive dendritic trees** (*Planned*)
+  Dendritic computation relies on nonlinear effects in the virtual dendritic tree. *NengoBio* adds support for arbitrary passive multicompartment neuron models to Nengo.
 
 ## Installing NengoBio
 
