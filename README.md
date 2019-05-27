@@ -69,17 +69,19 @@ A `bio.Connection` connection connects *n*-pre ensembles to a single target ense
 
 * `solver` (default `QPSolver()`): an `ExtendedSolver` instance from `nengo_bio.solvers`. `ExtendedSolvers` can solve for currents and take neuron parameters into account.
 
-**Example:** Simple communication channel between `ens_a` and `ens_b` taking neuron/synapse types into account and decoding the bias current:
+### Examples
+
+**Example 1:** Simple communication channel between `ens_a` and `ens_b` taking neuron/synapse types into account and decoding the bias current:
 ```py
 bio.Connection(ens_a, ens_b)
 ```
 
-**Example:** 2D communication channel where `ens_a`, `ens_b` represent a one-dimensional value and `ens_c` represents a two-dimensional value.
+**Example 2:** 2D communication channel where `ens_a`, `ens_b` represent a one-dimensional value and `ens_c` represents a two-dimensional value.
 ```py
 bio.Connection((ens_a, ens_b), ens_c)
 ```
 
-**Example:** Linear "Dendritic Computation"
+**Example 3:** Linear "Dendritic Computation"
 ```py
 bio.Connection((ens_a, ens_b), ens_c, function=lambda x: np.mean(x))
 ```
