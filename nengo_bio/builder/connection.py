@@ -195,7 +195,7 @@ def build_solver(model, solver, _, rng):
 
         # For the target population, fetch the gains and biases
         built_post_ens = model.params[conn.post_obj]
-        encoders = built_post_ens.encoders
+        encoders = built_post_ens.encoders / conn.post.radius
         gain = built_post_ens.gain
         bias = built_post_ens.bias
 
