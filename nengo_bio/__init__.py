@@ -14,6 +14,20 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+# Issue a warning if OMP_NUM_THREADS is not set
+def _warn_omp_num_threads():
+    import os
+    import warnings
+    var = "OMP_NUM_THREADS"
+    if ((not var in os.environ) or (os.environ[var] != "1")):
+        warnings.warn(
+            "\n𝗡𝗘𝗡𝗚𝗢𝗕𝗜𝗢 𝗪𝗔𝗥𝗡𝗜𝗡𝗚\n"
+            "The environment variable OMP_NUM_THREADS is not set to \"1\".\n"
+            "This will results in reduced performance when solving for\n"
+            "neuron weights.\n",
+            RuntimeWarning)
+_warn_omp_num_threads()
+
 from nengo_bio.connection import Connection
 from nengo_bio.ensemble import Ensemble
 
