@@ -21,7 +21,6 @@ from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 
 import nengo.builder
 
-# TODO: Do not override original BuiltConnection
 class BuiltConnection:
     def __init__(self):
         self.weights = {
@@ -30,6 +29,66 @@ class BuiltConnection:
         }
         self.pre_idx_dim_map = []
         self.pre_idx_neurons_map = []
+
+def get_multi_ensemble_eval_points(model, mens, rng, n_eval_points=None):
+    """
+    This function generates the evaluation points for the given MultiEnsemble.
+    """
+
+    def choice(A, n):
+        return A[rng.randint(0, A.shape[0], n)]
+
+    if mens.operator == mens.OP_NONE:
+        # Recursion base case. The MultiEnsemble encapsulates a single Ensemble
+        # instance -- just return the evaluation points associated with this
+        # ensemble.
+        pnts = model.params[mens.objs[0]].eval_points
+        pnts.setflags(write=False)
+        if n_eval_points is None:
+            return pnts
+        return choice(pnts, n_eval_points)
+    elif (mens.operator == mens.OP_STACK) or (mens.operator == mens.OP_JOIN):
+        # For each MultiEnsemble object in the stack/join, fetch the evaluation
+        # points associated with that MultiEnsemble. Track the maximum number
+        # of evaluation points.
+        pnts_per_obj, n_pnts = [None] * len(mens.objs), [0] * len(mens.objs)
+        for i, obj in enumerate(mens.objs):
+            pnts = get_multi_ensemble_eval_points(model, mens.objs[i], rng,
+                                                  n_eval_points)
+            pnts_per_obj[i] = pnts
+            n_pnts[i] = pnts.shape[0]
+        max_n_pnts = max(n_pnts)
+
+        # Either select n_eval_points or the maximum number of eval points
+        # as the number of evaluation points to generate.
+        if n_eval_points is None:
+            n_eval_points = max_n_pnts
+
+        if mens.operator == mens.OP_STACK:
+            # Write the evaluation points to a contiguous array.
+            pnts = np.empty((max_n_pnts, mens.dimensions))
+            d = 0
+            for i, p in enumerate(pnts_per_obj):
+                n_pnts, n_dims = p.shape
+                if n_eval_points >= max_n_pnts:
+                    # Write the points to the resulting array, fill the
+                    # remaining space with randomly selected samples
+                    pnts[:n_pnts, d:(d+n_dims)] = p
+                    pnts[n_pnts:, d:(d+n_dims)] = \
+                        choice(p, n_eval_points - n_pnts)
+                else:
+                    # Ranomly select n_eval_points points and write them to
+                    # the target array
+                    pnts[:, d:(d+n_dims)] = choice(p, n_eval_points)
+
+                # Increment the dimension counter
+                d += n_dims
+            return pnts
+        elif mens.operator == mens.OP_JOIN:
+            # Write the evaluation points to a contiguous array and select
+            # max_n_pnts of those
+            return choice(np.concatenate(pnts_per_obj, axis=0), n_eval_points)
+
 
 def remove_bias_current(model, ens):
     sig_post_bias = model.sig[ens.neurons]['bias']
@@ -43,11 +102,6 @@ def remove_bias_current(model, ens):
                 return True
     return False
 
-# TODO
-#@nengo.builder.Builder.register(Connection):
-#def build_connection(model, conn):
-#    # Build the connection
-#    nengo.builder.connection.build_connection(model, conn)
 
 @nengo.builder.Builder.register(SolverWrapper)
 def build_solver(model, solver, _, rng):

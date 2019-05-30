@@ -18,48 +18,189 @@ import numpy as np
 
 from nengo_bio.common import Excitatory, Inhibitory
 from nengo_bio.solvers import SolverWrapper, QPSolver
+from nengo.params import Parameter, BoolParam, IntParam, StringParam, \
+                         Default, Unconfigurable
 
 import nengo.base
 import nengo.config
 import nengo.connection
 import nengo.dists
 import nengo.exceptions
-import nengo.params
 import nengo.synapses
 import nengo.builder
 
-class PreParam(nengo.params.Parameter):
+class MultiEnsemble(nengo.base.SupportDefaultsMixin):
+    """
+    The MultiEnsemble class represents a view at a list of/set of ensembles.
+    Given a descriptor `descr` the represented value of the ensembles is either
+    stacked, or joined. "Stack" operations are denoted as a tuple
+
+        (ens_a, ens_b)
+
+    where ens_a is a 1D ensemble and ens_b is a 2D ensemble will result in a 3D
+    multi ensemble. "Join" operations are denoted as a set:
+
+        {ens_a, ens_b}
+
+    Here, both ens_a and ens_b have to have the same dimensionality -- the
+    resulting multi-ensemble will provide a view on ens_a and ens_b where ens_a
+    and ens_b represent the same value at the same time.
+    """
+
+    OP_NONE = 0
+    OP_STACK = 1
+    OP_JOIN = 2
+
+    n_neurons = IntParam('n_neurons', low=1, readonly=True)
+    dimensions = IntParam('dimensions', low=1, readonly=True)
+
+    def __init__(self, descr, operator=None):
+        # Nengo objects that can be base cases for the multi ensembles
+        SUPPORTED_NENGO_OBJS = (
+            nengo.ensemble.Ensemble
+        )
+
+        # Determine the operator type depending on whether the given descriptor
+        # is a tuple, set, or just an ensemble
+        if isinstance(descr, SUPPORTED_NENGO_OBJS) and \
+           ((operator is None) or (operator == OP_NONE)):
+            self.operator = MultiEnsemble.OP_NONE
+            self.objs = (descr,)
+        elif isinstance(descr, tuple) and (operator is None):
+            self.operator = MultiEnsemble.OP_STACK
+            self.objs = descr
+        elif isinstance(descr, set) and (operator is None):
+            self.operator = MultiEnsemble.OP_JOIN
+            self.objs = descr
+        elif isinstance(descr, MultiEnsemble):
+            if not (operator is None):
+                raise ValueError(
+                    "\"operator\" must be None when initialising a "
+                    "MultiEnsemble with a MultiEnsemble.")
+            self.operator = descr.operator
+            self.objs = descr.objs
+        elif (operator in [MultiEnsemble.OP_STACK,
+                           MultiEnsemble.OP_JOIN]) and hasattr(descr, '__len__'):
+            self.operator = operator
+            self.objs = tuple(descr)
+        else:
+            raise ValueError(
+                "Pre-object must either be a tuple, set, or an Ensemble")
+
+        # Recursively turn the individual objects into MultiEnsemble objects
+        if self.operator != MultiEnsemble.OP_NONE:
+            self.objs = tuple(map(MultiEnsemble, self.objs))
+
+        # In case this is a "join" operator, make sure the objects have the same
+        # dimensionality
+        if self.operator == MultiEnsemble.OP_JOIN:
+            if len(set(map(lambda x: x.size_out, self.objs))) > 1:
+                raise ValueError(
+                    "Ensembles must have the same dimensionality to be joined.")
+
+        # Accumulate the number of dimensions and neurons
+        self.dimensions = self._get_accu_dim_attr('dimensions')
+        self.n_neurons = sum(map(lambda x: x.n_neurons, self.objs))
+
+    def _get_accu_dim_attr(self, attr):
+        """
+        Internal function to accumulate a quantity with the name `attr`
+        according to whether this ensemble implements a stack or a join
+        operation.
+        """
+        if self.operator == MultiEnsemble.OP_JOIN:
+            return 0 if len(self.objs) == 0 else getattr(self.objs[0], attr)
+        else:
+            return sum(map(lambda x: getattr(x, attr), self.objs))
+
+    def __len__(self):
+        return self.dimensions
+
+    def __repr__(self):
+        if self.operator == MultiEnsemble.OP_NONE:
+            return str(self.objs[0])
+        else:
+            d0 = '{' if self.operator == MultiEnsemble.OP_JOIN else '('
+            d1 = '}' if self.operator == MultiEnsemble.OP_JOIN else ')'
+            return "{}{}{}".format(d0, ', '.join(map(str, self.objs)), d1)
+
+    @property
+    def size_in(self):
+        return self._get_accu_dim_attr("size_in")
+
+    @property
+    def size_out(self):
+        return self._get_accu_dim_attr("size_out")
+
+    def flatten(self):
+        """
+        Returns a flat tuple of ensembles, a tuple containing the 1D activity
+        slice for each ensemble (assigning a neuron ID to each neuron), and a
+        tuple containing the 2D eval_points slice.
+        """
+
+        if self.operator == MultiEnsemble.OP_NONE:
+            ens = self.objs
+            ns = (slice(0, self.n_neurons),) # neuron indices
+            ds = (slice(0, self.dimensions),) # dimension indicies
+            js = (0,) # join operator count
+        elif (self.operator == MultiEnsemble.OP_STACK) or\
+             (self.operator == MultiEnsemble.OP_JOIN):
+            arr_ens, arr_ns, arr_ds, arr_js = [], [], [], []
+            nn, dn, en, jn = 0, 0, 0, 0
+            for i, obj in enumerate(self.objs):
+                ens, ns, ds, js = obj.flatten()
+
+                # Increment the neuron numbers by nn
+                ns = tuple(slice(nn + x.start, nn + x.stop) for x in ns)
+                nn = ns[-1].stop
+
+                # Increment the dimension/eval points index
+                ds = tuple(slice(dn + x.start, dn + x.stop) for x in ds)
+                if self.operator == MultiEnsemble.OP_STACK:
+                    dn = ds[-1].stop
+
+                # Update the join operator count whenever we're joining an
+                # inner stack operation. This allows the evaluation point
+                # generator to realign evaluation points in case there is a
+                # mismatch between the number of evaluation points in the
+                # stack operator.
+                js = tuple(jn + x for x in js)
+                jn = max(jn, max(js))
+                if (obj.operator == MultiEnsemble.OP_STACK) and \
+                   (self.operator == MultiEnsemble.OP_JOIN):
+                    jn += 1
+
+                # Append the lists to the arrays
+                arr_ens.append(ens); arr_ns.append(ns)
+                arr_ds.append(ds); arr_js.append(js)
+
+            # Merge the arrays into a single tuple
+            ens, ns = sum(arr_ens, ()), sum(arr_ns, ())
+            ds, js = sum(arr_ds, ()), sum(arr_js, ())
+        return ens, ns, ds, js
+
+
+class PreParam(Parameter):
     """
     The PreParam class is used by nengo_bio.Connection to describe the list
     of pre-objects that are involved in a certain connection.
     """
 
     def __init__(self, name):
-        super().__init__(name, default=nengo.params.Unconfigurable,
+        super().__init__(name, default=Unconfigurable,
                          optional=False, readonly=True)
 
     def coerce(self, instance, nengo_obj):
-        # List of supported objects
-        SUPPORTED_NENGO_OBJS = (
-            nengo.base.NengoObject,
-            nengo.base.ObjView,
-            nengo.ensemble.Neurons,
-        )
+        # Try to convert the given ensemble into a MultiEnsemble
+        try:
+            obj = MultiEnsemble(nengo_obj, attr=self.name, obj=instance)
+        except ValueError as e:
+            raise nengo.exceptions.ValidationError(
+                e.msg, attr=self.name, obj=instance)
 
-        # Make sure nengo_obj is a list or tuple
-        if not isinstance(nengo_obj, (tuple, list)):
-            nengo_obj = (nengo_obj,)
+        return super().coerce(instance, obj)
 
-        # For each object, check whether it is in the list of supported nengo
-        # objects
-        for obj in nengo_obj:
-            if not isinstance(obj, SUPPORTED_NENGO_OBJS):
-                raise ValidationError("'{}' is not a Nengo object".format(obj),
-                                      attr=self.name, obj=instance)
-            if obj.size_in < 1:
-                raise ValidationError("'{}' must have size_in > 0.".format(obj),
-                                      attr=self.name, obj=instance)
-        return super().coerce(instance, nengo_obj)
 
 class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
     """Connection-specific validation for functions."""
@@ -81,9 +222,9 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
 
 class Connection(nengo.config.SupportDefaultsMixin):
 
-    label = nengo.params.StringParam(
+    label = StringParam(
         'label', default=None, optional=True)
-    seed = nengo.params.IntParam(
+    seed = IntParam(
         'seed', default=None, optional=True)
 
     pre = PreParam(
@@ -108,9 +249,9 @@ class Connection(nengo.config.SupportDefaultsMixin):
     eval_points = nengo.dists.DistOrArrayParam(
         'eval_points', default=None, optional=True, 
         sample_shape=('*', 'size_in'))
-    scale_eval_points = nengo.params.BoolParam(
+    scale_eval_points = BoolParam(
         'scale_eval_points', default=True)
-    decode_bias = nengo.params.BoolParam(
+    decode_bias = BoolParam(
         'decode_bias', default=True)
 
     _param_init_order = [
@@ -118,16 +259,16 @@ class Connection(nengo.config.SupportDefaultsMixin):
     ]
 
     def __init__(self, pre, post,
-                 synapse_exc=nengo.params.Default,
-                 synapse_inh=nengo.params.Default,
-                 function=nengo.params.Default,
-                 transform=nengo.params.Default,
-                 solver=nengo.params.Default,
-                 eval_points=nengo.params.Default,
-                 scale_eval_points=nengo.params.Default,
-                 decode_bias=nengo.params.Default,
-                 label=nengo.params.Default,
-                 seed=nengo.params.Default):
+                 synapse_exc=Default,
+                 synapse_inh=Default,
+                 function=Default,
+                 transform=Default,
+                 solver=Default,
+                 eval_points=Default,
+                 scale_eval_points=Default,
+                 decode_bias=Default,
+                 label=Default,
+                 seed=Default):
         super().__init__()
 
         # Copy the parameters
@@ -201,11 +342,11 @@ class Connection(nengo.config.SupportDefaultsMixin):
 
     @property
     def post_obj(self):
-        return self.post.obj if isinstance(self.post, nengo.base.ObjView) else self.post
+        return self.post
 
     @property
     def pre_obj(self):
-        return self.pre.obj if isinstance(self.pre, nengo.base.ObjView) else self.pre
+        return self.pre
 
     @property
     def pre_slice(self):
@@ -217,7 +358,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
 
     @property
     def size_in(self):
-        return sum(map(lambda x: x.size_out, self.pre))
+        return self.pre.size_out
 
     @property
     def size_mid(self):
