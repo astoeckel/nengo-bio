@@ -35,7 +35,7 @@ setup(
     ],
     install_requires=[
         "cvxopt>=1.2.2",
-        "nengo>=3.0.0.dev0",
+        "nengo>=2.8",
         "numpy>=1.16.3",
         "scipy>=1.2.0",
     ],

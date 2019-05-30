@@ -160,7 +160,7 @@ def remove_bias_current(model, ens):
 
 
 @nengo.builder.Builder.register(SolverWrapper)
-def build_solver(model, solver, _, rng):
+def build_solver(model, solver, _, rng, *args, **kwargs):
     # Fetch the high-level connection
     conn = solver.connection # Note: this is the nengo_bio.Connection object
                              # and NOT the nengo.Connection object
@@ -187,10 +187,13 @@ def build_solver(model, solver, _, rng):
         targets = nengo.builder.connection.get_targets(conn, eval_points)
 
         # Transform the target values
-        if not isinstance(conn.transform, nengo.connection.Dense):
-            raise nengo.exceptions.BuildError(
-                "Non-compositional solvers only work with Dense transforms")
-        transform = conn.transform.sample(rng=rng)
+        if hasattr(nengo.connection, 'Dense'): # Nengo 2.8 compat
+            if not isinstance(conn.transform, nengo.connection.Dense):
+                raise nengo.exceptions.BuildError(
+                    "Non-compositional solvers only work with Dense transforms")
+            transform = conn.transform.sample(rng=rng)
+        else:
+            transform = conn.transform
         targets = np.dot(targets, transform.T)
 
         # For the target population, fetch the gains and biases

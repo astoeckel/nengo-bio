@@ -197,6 +197,12 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
         function, size = function_info
         type_pre = type(conn.pre_obj).__name__
 
+# Nengo 2.8 compatibility
+if hasattr(nengo.connection, 'ConnectionTransformParam'):
+    ConnectionTransformParam = nengo.connection.ConnectionTransformParam
+else:
+    ConnectionTransformParam = nengo.connection.TransformParam
+
 
 class Connection(nengo.config.SupportDefaultsMixin):
 
@@ -218,7 +224,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
     function_info = ConnectionFunctionParam(
         'function', default=None, optional=True)
 
-    transform = nengo.connection.ConnectionTransformParam(
+    transform = ConnectionTransformParam(
         'transform', default=1.0)
 
     solver = nengo.solvers.SolverParam(
