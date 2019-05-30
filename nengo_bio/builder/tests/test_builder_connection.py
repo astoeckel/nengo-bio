@@ -47,32 +47,32 @@ def test_get_eval_points(nengo_ensembles_and_model):
     rng = np.random.RandomState(4871)
 
     mens = MultiEnsemble(ens_a)
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 10
     assert eval_points.shape[1] == 1
     assert np.all((eval_points == [1.0]).flatten())
 
     mens = MultiEnsemble((ens_a, ens_b))
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 11
     assert eval_points.shape[1] == 2
     assert np.all((eval_points == [1.0, 2.0]).flatten())
 
     mens = MultiEnsemble((ens_a, ens_d))
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 13
     assert eval_points.shape[1] == 2
     assert np.all((eval_points == [1.0, 5.0]).flatten())
 
     mens = MultiEnsemble((ens_a, ens_d), operator=MultiEnsemble.OP_JOIN)
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 13
     assert eval_points.shape[1] == 1
     assert np.all(np.logical_or(eval_points == 1.0, eval_points == 5.0))
 
     mens = MultiEnsemble(((ens_a, ens_b), ens_c),
                          operator=MultiEnsemble.OP_JOIN)
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 12
     assert eval_points.shape[1] == 2
     assert np.all((np.logical_or(
@@ -82,14 +82,14 @@ def test_get_eval_points(nengo_ensembles_and_model):
 
     mens = MultiEnsemble(((ens_a, ens_b), ens_c),
                          operator=MultiEnsemble.OP_STACK)
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 12
     assert eval_points.shape[1] == 4
     assert np.all((eval_points == [1.0, 2.0, 3.0, 4.0]).flatten())
 
     mens = MultiEnsemble(((ens_a, ens_b), ens_d),
                          operator=MultiEnsemble.OP_STACK)
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 13
     assert eval_points.shape[1] == 3
     assert np.all((eval_points == [1.0, 2.0, 5.0]).flatten())
@@ -98,7 +98,7 @@ def test_get_eval_points(nengo_ensembles_and_model):
                MultiEnsemble(((ens_a, ens_b), (ens_a, ens_b), ens_c), 
                    operator=MultiEnsemble.OP_JOIN),
                ens_d))
-    eval_points = get_multi_ensemble_eval_points(model, mens, rng)
+    eval_points = get_multi_ensemble_eval_points(model, mens, rng=rng)
     assert eval_points.shape[0] == 13
     assert eval_points.shape[1] == 3
     assert np.all((np.logical_or(
@@ -113,32 +113,32 @@ def test_get_eval_points_fixed(nengo_ensembles_and_model):
 
     for N in [0, 5, 20]:
         mens = MultiEnsemble(ens_a)
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 1
         assert np.all((eval_points == [1.0]).flatten())
 
         mens = MultiEnsemble((ens_a, ens_b))
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 2
         assert np.all((eval_points == [1.0, 2.0]).flatten())
 
         mens = MultiEnsemble((ens_a, ens_d))
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 2
         assert np.all((eval_points == [1.0, 5.0]).flatten())
 
         mens = MultiEnsemble((ens_a, ens_d), operator=MultiEnsemble.OP_JOIN)
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 1
         assert np.all(np.logical_or(eval_points == 1.0, eval_points == 5.0))
 
         mens = MultiEnsemble(((ens_a, ens_b), ens_c),
                              operator=MultiEnsemble.OP_JOIN)
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 2
         assert np.all((np.logical_or(
@@ -148,14 +148,14 @@ def test_get_eval_points_fixed(nengo_ensembles_and_model):
 
         mens = MultiEnsemble(((ens_a, ens_b), ens_c),
                              operator=MultiEnsemble.OP_STACK)
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 4
         assert np.all((eval_points == [1.0, 2.0, 3.0, 4.0]).flatten())
 
         mens = MultiEnsemble(((ens_a, ens_b), ens_d),
                              operator=MultiEnsemble.OP_STACK)
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 3
         assert np.all((eval_points == [1.0, 2.0, 5.0]).flatten())
@@ -164,7 +164,7 @@ def test_get_eval_points_fixed(nengo_ensembles_and_model):
                    MultiEnsemble(((ens_a, ens_b), (ens_a, ens_b), ens_c), 
                        operator=MultiEnsemble.OP_JOIN),
                    ens_d))
-        eval_points = get_multi_ensemble_eval_points(model, mens, rng, N)
+        eval_points = get_multi_ensemble_eval_points(model, mens, N, rng=rng)
         assert eval_points.shape[0] == N
         assert eval_points.shape[1] == 3
         assert np.all((np.logical_or(

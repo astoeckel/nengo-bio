@@ -19,14 +19,8 @@ with nengo.Network() as model:
 
     nengo.Connection(inp_a, ens_source)
     bio.Connection(ens_source, ens_inhint)
-    bio.Connection((ens_source, ens_inhint), ens_target,
-                   function=lambda x: np.mean(x)**2,
-                   eval_points=[1, 1] * np.linspace(-1, 1, 1000)[:, None])
-
-#    # TODO: The above should be simpler, probably allow something such as
-#    bio.Connection(Join(ens_source, ens_inhint), ens_target,
-#                   function=lambda x: x**2)
-#    # Where the default operation is "Stack"
+    bio.Connection({ens_source, ens_inhint}, ens_target,
+                   function=lambda x: np.sin(x * np.pi))
 
 #    # Note: the solver of the last connection has access to the state of both
 #    # the pre-populations at the same time. This is equivalent to a connection

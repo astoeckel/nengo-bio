@@ -143,13 +143,12 @@ class MultiEnsemble(nengo.base.SupportDefaultsMixin):
             ens = self.objs
             ns = (slice(0, self.n_neurons),) # neuron indices
             ds = (slice(0, self.dimensions),) # dimension indicies
-            js = (0,) # join operator count
         elif (self.operator == MultiEnsemble.OP_STACK) or\
              (self.operator == MultiEnsemble.OP_JOIN):
-            arr_ens, arr_ns, arr_ds, arr_js = [], [], [], []
-            nn, dn, en, jn = 0, 0, 0, 0
+            arr_ens, arr_ns, arr_ds = [], [], []
+            nn, dn, en = 0, 0, 0
             for i, obj in enumerate(self.objs):
-                ens, ns, ds, js = obj.flatten()
+                ens, ns, ds = obj.flatten()
 
                 # Increment the neuron numbers by nn
                 ns = tuple(slice(nn + x.start, nn + x.stop) for x in ns)
@@ -160,25 +159,12 @@ class MultiEnsemble(nengo.base.SupportDefaultsMixin):
                 if self.operator == MultiEnsemble.OP_STACK:
                     dn = ds[-1].stop
 
-                # Update the join operator count whenever we're joining an
-                # inner stack operation. This allows the evaluation point
-                # generator to realign evaluation points in case there is a
-                # mismatch between the number of evaluation points in the
-                # stack operator.
-                js = tuple(jn + x for x in js)
-                jn = max(jn, max(js))
-                if (obj.operator == MultiEnsemble.OP_STACK) and \
-                   (self.operator == MultiEnsemble.OP_JOIN):
-                    jn += 1
-
                 # Append the lists to the arrays
-                arr_ens.append(ens); arr_ns.append(ns)
-                arr_ds.append(ds); arr_js.append(js)
+                arr_ens.append(ens); arr_ns.append(ns); arr_ds.append(ds)
 
             # Merge the arrays into a single tuple
-            ens, ns = sum(arr_ens, ()), sum(arr_ns, ())
-            ds, js = sum(arr_ds, ()), sum(arr_js, ())
-        return ens, ns, ds, js
+            ens, ns, ds = sum(arr_ens, ()), sum(arr_ns, ()), sum(arr_ds, ())
+        return ens, ns, ds
 
 
 class PreParam(Parameter):
@@ -194,7 +180,7 @@ class PreParam(Parameter):
     def coerce(self, instance, nengo_obj):
         # Try to convert the given ensemble into a MultiEnsemble
         try:
-            obj = MultiEnsemble(nengo_obj, attr=self.name, obj=instance)
+            obj = MultiEnsemble(nengo_obj)
         except ValueError as e:
             raise nengo.exceptions.ValidationError(
                 e.msg, attr=self.name, obj=instance)
@@ -210,14 +196,6 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
     def check_function_can_be_applied(self, conn, function_info):
         function, size = function_info
         type_pre = type(conn.pre_obj).__name__
-
-        if function is not None:
-            for pre_ in conn.pre_obj:
-                if not isinstance(pre_, nengo.ensemble.Ensemble):
-                    raise ValidationError(
-                        "function can only be set for connections from an " +
-                        " Ensemble (got type %r)" % type_pre,
-                        attr=self.name, obj=conn)
 
 
 class Connection(nengo.config.SupportDefaultsMixin):
@@ -245,12 +223,12 @@ class Connection(nengo.config.SupportDefaultsMixin):
 
     solver = nengo.solvers.SolverParam(
         'solver', default=QPSolver())
-
     eval_points = nengo.dists.DistOrArrayParam(
         'eval_points', default=None, optional=True, 
         sample_shape=('*', 'size_in'))
     scale_eval_points = BoolParam(
         'scale_eval_points', default=True)
+    n_eval_points = IntParam('n_eval_points', default=None, optional=True)
     decode_bias = BoolParam(
         'decode_bias', default=True)
 
@@ -266,6 +244,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  solver=Default,
                  eval_points=Default,
                  scale_eval_points=Default,
+                 n_eval_points=Default,
                  decode_bias=Default,
                  label=Default,
                  seed=Default):
@@ -280,6 +259,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.synapse_inh = synapse_inh
         self.eval_points = eval_points
         self.scale_eval_points = scale_eval_points
+        self.n_eval_points = n_eval_points
         self.decode_bias = decode_bias
         self.function_info = function
         self.transform = transform
@@ -288,15 +268,17 @@ class Connection(nengo.config.SupportDefaultsMixin):
         # For each pre object add two actual nengo connections: an excitatory
         # path and an inhibitory path
         self.connections = []
-        for i, pre_ in enumerate(self.pre):
+        arr_ens, arr_ns, _ = self.pre.flatten()
+        for i, (ens, ns) in enumerate(zip(arr_ens, arr_ns)):
             def mkcon(synapse_type, synapse):
                 return nengo.connection.Connection(
-                    pre=pre_,
+                    pre=ens,
                     post=self.post,
-                    transform=np.ones((self.post.size_in, pre_.size_out)) * (-1 if synapse_type is Inhibitory else 1),
+                    transform=np.zeros((self.post.size_in, ens.size_out)),
                     seed=self.seed,
                     synapse=synapse,
-                    solver=SolverWrapper(self.solver, i, self, synapse_type))
+                    solver=SolverWrapper(
+                        self.solver, i, self, ns, synapse_type))
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))

@@ -14,10 +14,13 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import warnings
 import numpy as np
 
 from nengo_bio.common import Excitatory, Inhibitory
 from nengo_bio.solvers import SolverWrapper, ExtendedSolver
+
+from nengo.exceptions import NengoWarning
 
 import nengo.builder
 
@@ -27,10 +30,9 @@ class BuiltConnection:
             Excitatory: None,
             Inhibitory: None
         }
-        self.pre_idx_dim_map = []
-        self.pre_idx_neurons_map = []
 
-def get_multi_ensemble_eval_points(model, mens, rng, n_eval_points=None):
+def get_multi_ensemble_eval_points(
+    model, mens, n_eval_points=None, scale_eval_points=True, rng=np.random):
     """
     This function generates the evaluation points for the given MultiEnsemble.
     """
@@ -44,17 +46,25 @@ def get_multi_ensemble_eval_points(model, mens, rng, n_eval_points=None):
         # ensemble.
         pnts = model.params[mens.objs[0]].eval_points
         pnts.setflags(write=False)
-        if n_eval_points is None:
-            return pnts
-        return choice(pnts, n_eval_points)
+
+        # Scale the evaluation points in case this was requested by the
+        # connection
+        if scale_eval_points:
+            pnts = pnts * mens.objs[0].radius
+
+        # In case a specific number of eval points is requested, create a random
+        # selection of eval points
+        if not n_eval_points is None:
+            pnts = choice(pnts, n_eval_points)
+        return pnts
     elif (mens.operator == mens.OP_STACK) or (mens.operator == mens.OP_JOIN):
         # For each MultiEnsemble object in the stack/join, fetch the evaluation
         # points associated with that MultiEnsemble. Track the maximum number
         # of evaluation points.
         pnts_per_obj, n_pnts = [None] * len(mens.objs), [0] * len(mens.objs)
         for i, obj in enumerate(mens.objs):
-            pnts = get_multi_ensemble_eval_points(model, mens.objs[i], rng,
-                                                  n_eval_points)
+            pnts = get_multi_ensemble_eval_points(
+                model, mens.objs[i], n_eval_points, scale_eval_points, rng)
             pnts_per_obj[i] = pnts
             n_pnts[i] = pnts.shape[0]
         max_n_pnts = max(n_pnts)
@@ -88,6 +98,52 @@ def get_multi_ensemble_eval_points(model, mens, rng, n_eval_points=None):
             # Write the evaluation points to a contiguous array and select
             # max_n_pnts of those
             return choice(np.concatenate(pnts_per_obj, axis=0), n_eval_points)
+    else:
+        raise ValueError("Invalid MultiEnsemble operator")
+
+
+def get_eval_points(model, conn, rng):
+    # In case no eval_points object has been specified
+    if conn.eval_points is None:
+        return get_multi_ensemble_eval_points(
+            model, conn.pre_obj, conn.n_eval_points, conn.scale_eval_points,
+            rng)
+    else:
+        if conn.scale_eval_points:
+            warnings.warn(NengoWarning(
+                "Setting scale_eval_points to True has no effect on {} if "
+                "eval_points are specified manually.".format(conn.pre_obj)))
+        return nengo.builder.ensemble.gen_eval_points(
+            conn, conn.eval_points, rng, False)
+
+
+def get_multi_ensemble_activities(model, mens, eval_points):
+    # Create the empty activity matrix
+    n_eval_points = eval_points.shape[0]
+    n_neurons = mens.n_neurons
+    activities = np.empty((n_eval_points, n_neurons))
+
+    # Iterate over all ensembles and ask Nengo to compute the activities. Write
+    # the results to the activity matrix.
+    arr_ens, arr_ns, arr_ds = mens.flatten()
+    for ens, ns, ds in zip(arr_ens, arr_ns, arr_ds):
+        activities[:, ns] = nengo.builder.ensemble.get_activities(
+            model.params[ens], ens, eval_points[:, ds])
+
+    return activities
+
+
+def get_multi_ensemble_synapse_types(model, mens):
+    # Create the empty synapse type map
+    n_neurons = mens.n_neurons
+    synapse_types = np.empty((2, n_neurons), dtype=np.bool)
+
+    # Iterate over all ensembles and write the synapse types to the map
+    arr_ens, arr_ns, _ = mens.flatten()
+    for ens, ns in zip(arr_ens, arr_ns):
+        for i, type_ in enumerate((Excitatory, Inhibitory)):
+            synapse_types[i, ns] = model.params[ens].synapse_types[type_]
+    return synapse_types
 
 
 def remove_bias_current(model, ens):
@@ -118,54 +174,14 @@ def build_solver(model, solver, _, rng):
         if conn.decode_bias:
             remove_bias_current(model, conn.post_obj)
 
-        # For each pre-ensemble, fetch the evaluation points and the activities
-        d0, d1, n0, n1 = 0, 0, 0, 0
-
-        N = len(conn.pre)
-        eval_points_list = [None] * N
-        activities_list = [None] * N
-        pre_idx_dim_map = [(0, 0)] * N
-        pre_idx_neurons_map = [(0, 0)] * N
-        synapse_types = {
-            Excitatory: [],
-            Inhibitory: []
-        }
-
-        for pre_idx, pre_ in enumerate(conn.pre):
-            d0, d1, n0, n1 = d1, d1 + pre_.size_out, n1, n1 + pre_.neurons.size_out
-            if conn.eval_points is None:
-                eval_points = model.params[pre_].eval_points.view()
-                eval_points.setflags(write=False)
-            else:
-                eval_points = conn.eval_points[:, d0:d1]
-
-            built_pre_ens = model.params[pre_]
-            synapse_types[Excitatory].append(
-                built_pre_ens.synapse_types[Excitatory])
-            synapse_types[Inhibitory].append(
-                built_pre_ens.synapse_types[Inhibitory])
-
-            activities = nengo.builder.ensemble.get_activities(
-                model.params[pre_], pre_, eval_points)
-
-            eval_points_list[pre_idx] = eval_points
-            activities_list[pre_idx] = activities
-            pre_idx_dim_map[pre_idx] = (d0, d1)
-            pre_idx_neurons_map[pre_idx] = (n0, n1)
-
-        # Make sure each pre-population has the same number of evaluation points
-        if len(set(map(lambda x: x.shape[0], eval_points))) > 1:
-            raise nengo.exceptions.BuildError(
-                "The number of evaluation points must be the same for all " +
-                "pre-objects in connection {}".format(conn))
-
-        # Build the evaluation points and activities encompassing all source
-        # ensembles
-        eval_points = np.concatenate(eval_points_list, axis=1)
-        activities = np.concatenate(activities_list, axis=1)
-        synapse_types = np.array((
-            np.concatenate(synapse_types[Excitatory]),
-            np.concatenate(synapse_types[Inhibitory])), dtype=np.bool)
+        # Fetch the evaluation points, activites, and synapse types for the
+        # entire MultiEnsemble
+        eval_points = get_eval_points(
+            model, conn, rng)
+        activities = get_multi_ensemble_activities(
+            model, conn.pre_obj, eval_points)
+        synapse_types = get_multi_ensemble_synapse_types(
+            model, conn.pre_obj)
 
         # Fetch the target values in representation space
         targets = nengo.builder.connection.get_targets(conn, eval_points)
@@ -198,16 +214,10 @@ def build_solver(model, solver, _, rng):
 
         built_connection.weights[Excitatory] =  WE
         built_connection.weights[Inhibitory] = -WI
-        built_connection.pre_idx_dim_map = pre_idx_dim_map
-        built_connection.pre_idx_neurons_map = pre_idx_neurons_map
     else:
         built_connection = model.params[conn]
 
-    n_neurons_pre = conn.pre_obj[solver.pre_idx].neurons.size_out
-    n_neurons_post = conn.post_obj.neurons.size_in
-
-    bc = built_connection
-    n0, n1 = bc.pre_idx_neurons_map[solver.pre_idx]
-    W = np.copy(bc.weights[solver.synapse_type][n0:n1].T)
+    W = np.copy(
+        built_connection.weights[solver.synapse_type][solver.neuron_indices].T)
 
     return None, W, None

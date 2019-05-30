@@ -85,60 +85,53 @@ def test_multi_ensemble_flatten(nengo_ensembles):
 
     # Single ensemble without operator
     mens = MultiEnsemble(ens_a)
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 1
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 1
     assert ens[0] == ens_a
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ds[0].start == 0 and ds[0].stop == 1
-    assert js[0] == 0
 
     # Single ensemble with Stack operator
     mens = MultiEnsemble((ens_a,))
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 1
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 1
     assert ens[0] == ens_a
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ds[0].start == 0 and ds[0].stop == 1
-    assert js[0] == 0
 
     # Single ensemble with Join operator
     mens = MultiEnsemble({ens_a,})
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 1
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 1
     assert ens[0] == ens_a
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ds[0].start == 0 and ds[0].stop == 1
-    assert js[0] == 0
 
     # Two ensembles with Join operator
     mens = MultiEnsemble((ens_a, ens_b), operator=MultiEnsemble.OP_JOIN)
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 2
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 2
     assert (ens_a in ens) and (ens_b in ens)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
     assert ds[0].start == 0 and ds[0].stop == 1
     assert ds[1].start == 0 and ds[1].stop == 1
-    assert js[0] == 0
-    assert js[1] == 0
 
     # Two ensembles with Stack operator
     mens = MultiEnsemble((ens_a, ens_b), operator=MultiEnsemble.OP_STACK)
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 2
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 2
     assert (ens_a in ens) and (ens_b in ens)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
     assert ds[0].start == 0 and ds[0].stop == 1
     assert ds[1].start == 1 and ds[1].stop == 2
-    assert js[0] == 0
-    assert js[1] == 0
 
     # Three ensembles with Stack/Join operator
     mens = MultiEnsemble(((ens_a, ens_b), ens_c), 
                          operator=MultiEnsemble.OP_JOIN)
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 3
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 3
     assert ens == (ens_a, ens_b, ens_c)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
@@ -146,17 +139,14 @@ def test_multi_ensemble_flatten(nengo_ensembles):
     assert ds[0].start == 0 and ds[0].stop == 1
     assert ds[1].start == 1 and ds[1].stop == 2
     assert ds[2].start == 0 and ds[2].stop == 2
-    assert js[0] == 0
-    assert js[1] == 0
-    assert js[2] == 1
 
     # Four ensembles with Stack/Join operator
     mens = MultiEnsemble((
                MultiEnsemble(((ens_a, ens_b), ens_c), 
                    operator=MultiEnsemble.OP_JOIN),
                ens_c))
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 4
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 4
     assert ens == (ens_a, ens_b, ens_c, ens_c)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
@@ -166,18 +156,14 @@ def test_multi_ensemble_flatten(nengo_ensembles):
     assert ds[1].start == 1 and ds[1].stop == 2
     assert ds[2].start == 0 and ds[2].stop == 2
     assert ds[3].start == 2 and ds[3].stop == 4
-    assert js[0] == 0
-    assert js[1] == 0
-    assert js[2] == 1
-    assert js[3] == 1
 
     # Five ensembles with Stack/Join operator
     mens = MultiEnsemble((
                MultiEnsemble(((ens_a, ens_b), ens_c, ens_c), 
                    operator=MultiEnsemble.OP_JOIN),
                ens_c))
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 5
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 5
     assert ens == (ens_a, ens_b, ens_c, ens_c, ens_c)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
@@ -189,19 +175,14 @@ def test_multi_ensemble_flatten(nengo_ensembles):
     assert ds[2].start == 0 and ds[2].stop == 2
     assert ds[3].start == 0 and ds[3].stop == 2
     assert ds[4].start == 2 and ds[4].stop == 4
-    assert js[0] == 0
-    assert js[1] == 0
-    assert js[2] == 1
-    assert js[3] == 1
-    assert js[4] == 1
 
     # Six ensembles with Stack/Join operator
     mens = MultiEnsemble((
                MultiEnsemble(((ens_a, ens_b), (ens_a, ens_b), ens_c), 
                    operator=MultiEnsemble.OP_JOIN),
                ens_c))
-    ens, ns, ds, js = mens.flatten()
-    assert len(ens) == len(ns) == len(ds) == len(js) == 6
+    ens, ns, ds = mens.flatten()
+    assert len(ens) == len(ns) == len(ds) == 6
     assert ens == (ens_a, ens_b, ens_a, ens_b, ens_c, ens_c)
     assert ns[0].start == 0 and ns[0].stop == 101
     assert ns[1].start == 101 and ns[1].stop == 203
@@ -215,12 +196,6 @@ def test_multi_ensemble_flatten(nengo_ensembles):
     assert ds[3].start == 1 and ds[3].stop == 2
     assert ds[4].start == 0 and ds[4].stop == 2
     assert ds[5].start == 2 and ds[5].stop == 4
-    assert js[0] == 0
-    assert js[1] == 0
-    assert js[2] == 1
-    assert js[3] == 1
-    assert js[4] == 2
-    assert js[5] == 2
 
 def test_multi_ensemble_exceptions(nengo_ensembles):
     ens_a, ens_b, ens_c = nengo_ensembles

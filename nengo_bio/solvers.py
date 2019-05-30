@@ -37,11 +37,13 @@ class ExtendedSolver(Solver):
 
 
 class SolverWrapper(ExtendedSolver):
-    def __init__(self, solver, pre_idx, connection, synapse_type):
+    def __init__(self, solver, pre_idx, connection, neuron_indices,
+                 synapse_type):
         super().__init__()
         self.solver = solver
         self.pre_idx = pre_idx
         self.connection = connection
+        self.neuron_indices = neuron_indices
         self.synapse_type = synapse_type
 
     def __call__(self, A, J, neuron_types, rng=np.random):
