@@ -56,6 +56,7 @@ class QPSolver(ExtendedSolver):
     relax = BoolParam('relax')
 
     def __init__(self, reg=1e-3, relax=False):
+        super().__init__()
         self.reg = reg
         self.relax = relax
 
@@ -70,5 +71,10 @@ class QPSolver(ExtendedSolver):
         # to "None"
         iTh = None if not self.relax else 1.0
 
-        return qp_solver.solve(A, J, ws, synapse_types, iTh=iTh, reg=reg)
+        # Use the faster NNLS solver instead of CVXOPT if we do not need
+        # current relaxation
+        use_lstsq = iTh is None
+
+        return qp_solver.solve(A, J, ws, synapse_types,
+                               iTh=iTh, reg=reg, use_lstsq=use_lstsq)
 
