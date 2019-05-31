@@ -110,14 +110,13 @@ def test_parisien():
 
         # Inhibitory inter-neuron population
         ens_inhint = bio.Ensemble(n_neurons=102, dimensions=1, p_inh=1.0)
-                                  #intercepts=nengo.dists.Uniform(-1.5, -0.25))
 
         # Target population
         ens_target = bio.Ensemble(n_neurons=103, dimensions=1)
 
         nengo.Connection(inp_a, ens_source)
         bio.Connection(ens_source, ens_inhint)
-        bio.Connection((ens_source, ens_inhint), ens_target,
+        bio.Connection({ens_source, ens_inhint}, ens_target,
                        function=lambda x: np.mean(x)**2)
 
         probe = nengo.Probe(ens_target, synapse=PROBE_SYNAPSE)
