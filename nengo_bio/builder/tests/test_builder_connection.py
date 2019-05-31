@@ -182,7 +182,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
     with model.toplevel:
         conn = Connection((ens_a, ens_b), ens_c)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     assert np.prod(connectivity[0, :101, :].flatten()) == 1
     assert np.sum(connectivity[0, 101:, :].flatten()) == 0
@@ -193,14 +193,14 @@ def test_get_connectivity(nengo_ensembles_and_model):
     with model.toplevel:
         conn = Connection(ens_d, ens_d)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
     assert np.prod(connectivity.flatten()) == 1
 
     # ens_a is excitatory, ens_b is inhibitory
     with model.toplevel:
         conn = Connection((ens_a, ens_b), ens_c, max_n_post_synapses=10)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[:, :, i]) == 10
@@ -210,7 +210,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
         conn = Connection((ens_a, ens_b), ens_c,
         max_n_post_synapses=10, max_n_post_synapses_exc=4)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[0, :, i]) == 4
@@ -223,7 +223,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
         conn = Connection((ens_a, ens_b), ens_c,
         max_n_post_synapses=10, max_n_post_synapses_exc=6)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[0, :, i]) == 6
@@ -236,7 +236,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
         conn = Connection((ens_a, ens_b), ens_c,
         max_n_post_synapses=10, max_n_post_synapses_exc=20)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[0, :, i]) == 10
@@ -249,7 +249,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
         conn = Connection((ens_a, ens_b), ens_c,
         max_n_post_synapses=10, max_n_post_synapses_inh=20)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[0, :, i]) == 0
@@ -262,7 +262,7 @@ def test_get_connectivity(nengo_ensembles_and_model):
         conn = Connection((ens_a, ens_b), ens_c,
         max_n_post_synapses_inh=10, max_n_post_synapses_exc=4)
     synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
-    connectivity = get_connectivity(model, conn, synapse_types)
+    connectivity = get_connectivity(conn, synapse_types)
 
     for i in range(ens_c.n_neurons):
         assert np.sum(connectivity[0, :, i]) == 4

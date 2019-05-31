@@ -146,7 +146,7 @@ def get_multi_ensemble_synapse_types(model, mens):
     return synapse_types
 
 
-def get_connectivity(model, conn, synapse_types, rng=np.random):
+def get_connectivity(conn, synapse_types, rng=np.random):
     # Create some convenient aliases
     Npre, Npost = conn.pre_obj.n_neurons, conn.post_obj.n_neurons
     mps = conn.max_n_post_synapses
@@ -206,8 +206,8 @@ def get_connectivity(model, conn, synapse_types, rng=np.random):
                 idcs = rng.choice(
                     np.arange(0, n_inh + n_exc, dtype=np.int32),
                     size=mps_rem, replace=False)
-                i_exc_sel = idcs[idcs < n_exc]
-                i_inh_sel = idcs[idcs >= n_exc] - n_exc
+                i_exc_sel = i_exc[idcs[idcs < n_exc]]
+                i_inh_sel = i_inh[idcs[idcs >= n_exc] - n_exc]
 
         # Set the corresponding entries in the connectivity matrix to true
         connectivity[0, i_exc_sel, i_post] = True
@@ -276,7 +276,7 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
             target_currents += bias
 
         # Construct the connectivity matrix for this connection
-        connectivity = get_connectivity(model, conn, synapse_types, rng)
+        connectivity = get_connectivity(conn, synapse_types, rng)
 
         # LIF neuron model parameters
         WE, WI = solver(activities, target_currents, connectivity, rng)
