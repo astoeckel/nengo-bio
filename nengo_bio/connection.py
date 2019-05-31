@@ -234,9 +234,17 @@ class Connection(nengo.config.SupportDefaultsMixin):
         sample_shape=('*', 'size_in'))
     scale_eval_points = BoolParam(
         'scale_eval_points', default=True)
-    n_eval_points = IntParam('n_eval_points', default=None, optional=True)
+    n_eval_points = IntParam(
+        'n_eval_points', default=None, optional=True)
     decode_bias = BoolParam(
         'decode_bias', default=True)
+
+    max_n_post_synapses = IntParam(
+        'max_n_post_synapses', low=0, default=None, optional=True)
+    max_n_post_synapses_exc = IntParam(
+        'max_n_post_synapses_exc', low=0, default=None, optional=True)
+    max_n_post_synapses_inh = IntParam(
+        'max_n_post_synapses_inh', low=0, default=None, optional=True)
 
     _param_init_order = [
         'pre', 'post', 'synapse_exc', 'synapse_inh', 'function_info'
@@ -252,6 +260,9 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  scale_eval_points=Default,
                  n_eval_points=Default,
                  decode_bias=Default,
+                 max_n_post_synapses=Default,
+                 max_n_post_synapses_exc=Default,
+                 max_n_post_synapses_inh=Default,
                  label=Default,
                  seed=Default):
         super().__init__()
@@ -259,6 +270,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         # Copy the parameters
         self.label = label
         self.seed = seed
+
         self.pre = pre
         self.post = post
         self.synapse_exc = synapse_exc
@@ -270,6 +282,10 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.function_info = function
         self.transform = transform
         self.solver = solver
+
+        self.max_n_post_synapses = max_n_post_synapses
+        self.max_n_post_synapses_exc = max_n_post_synapses_exc
+        self.max_n_post_synapses_inh = max_n_post_synapses_inh
 
         # For each pre object add two actual nengo connections: an excitatory
         # path and an inhibitory path

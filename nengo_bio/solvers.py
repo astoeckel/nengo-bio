@@ -46,8 +46,8 @@ class SolverWrapper(ExtendedSolver):
         self.neuron_indices = neuron_indices
         self.synapse_type = synapse_type
 
-    def __call__(self, A, J, neuron_types, rng=np.random):
-        return self.solver(A, J, neuron_types, rng)
+    def __call__(self, A, J, connectivity, rng=np.random):
+        return self.solver(A, J, connectivity, rng)
 
 
 class QPSolver(ExtendedSolver):
@@ -60,7 +60,7 @@ class QPSolver(ExtendedSolver):
         self.reg = reg
         self.relax = relax
 
-    def __call__(self, A, J, synapse_types, rng=np.random):
+    def __call__(self, A, J, connectivity, rng=np.random):
         # Neuron model parameters. For now we only support current-based LIF
         ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
 
@@ -75,6 +75,6 @@ class QPSolver(ExtendedSolver):
         # current relaxation
         use_lstsq = iTh is None
 
-        return qp_solver.solve(A, J, ws, synapse_types,
+        return qp_solver.solve(A, J, ws, connectivity,
                                iTh=iTh, reg=reg, use_lstsq=use_lstsq)
 

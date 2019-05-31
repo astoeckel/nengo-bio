@@ -20,7 +20,7 @@ import numpy as np
 from nengo_bio.common import Excitatory, Inhibitory
 from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 
-from nengo.exceptions import NengoWarning
+from nengo.exceptions import NengoWarning, BuildError
 
 import nengo.builder
 
@@ -102,7 +102,7 @@ def get_multi_ensemble_eval_points(
         raise ValueError("Invalid MultiEnsemble operator")
 
 
-def get_eval_points(model, conn, rng):
+def get_eval_points(model, conn, rng=np.random):
     # In case no eval_points object has been specified
     if conn.eval_points is None:
         return get_multi_ensemble_eval_points(
@@ -145,6 +145,74 @@ def get_multi_ensemble_synapse_types(model, mens):
             synapse_types[i, ns] = model.params[ens].synapse_types[type_]
     return synapse_types
 
+
+def get_connectivity(model, conn, synapse_types, rng=np.random):
+    # Create some convenient aliases
+    Npre, Npost = conn.pre_obj.n_neurons, conn.post_obj.n_neurons
+    mps = conn.max_n_post_synapses
+    mps_E, mps_I = conn.max_n_post_synapses_exc, conn.max_n_post_synapses_inh
+    has_mps = not (mps is None)
+    has_mps_E, has_mps_I = not (mps_E is None), not (mps_I is None)
+
+    # If no restrictions were given, just allow all-to-all connections
+    if not (has_mps or has_mps_E or has_mps_I):
+        return np.array((
+            np.tile(synapse_types[0, :, None], Npost),
+            np.tile(synapse_types[1, :, None], Npost)),
+            dtype=np.bool)
+    if has_mps and has_mps_E and has_mps_I:
+        raise BuildError(
+            "Specifying max_n_post_synapses as well as both "
+            "max_n_post_synapses_exc and max_n_post_synapses_inh is invalid.")
+
+    # Limit mps_E and mps_I to mps
+    if has_mps:
+        if has_mps_E:
+            mps_E = min(mps, mps_E)
+        if has_mps_I:
+            mps_I = min(mps, mps_I)
+
+    connectivity = np.zeros((2, Npre, Npost), dtype=np.bool)
+    for i_post in range(Npost):
+        # Get the indices of possible excitatory connection sites
+        i_exc, i_inh = np.where(synapse_types[0])[0], np.where(synapse_types[1])[0]
+        n_exc, n_inh = i_exc.size, i_inh.size
+
+        # Select mps_E excitatory/mps_I inhibitory connections
+        i_exc_sel, i_inh_sel = np.zeros((2, 0), dtype=np.int32)
+        if has_mps_E:
+            i_exc_sel = rng.choice(i_exc, size=min(mps_E, n_exc), replace=False)
+        if has_mps_I:
+            i_inh_sel = rng.choice(i_inh, size=min(mps_I, n_inh), replace=False)
+
+        # We're done if both has_mps_E and has_mps_I are true. Otherwise, select
+        # more neurons up to mps.
+        if not (has_mps_E and has_mps_I):
+            # If no maximum number of synapses is set, set it to the maximum number
+            # of synapses that are still available
+            if not has_mps:
+                mps_rem = n_exc + n_inh
+            else:
+                mps_rem = mps
+            mps_rem = max(0, mps_rem - i_exc_sel.size - i_inh_sel.size)
+
+            if has_mps_E: # Need to select inhibitory neurons
+                i_inh_sel = rng.choice(
+                    i_inh, size=min(mps_rem, n_inh), replace=False)
+            elif has_mps_I: # Need to select excitatory neurons
+                i_exc_sel = rng.choice(
+                    i_exc, size=min(mps_rem, n_exc), replace=False)
+            else: # Need to select both excitatory and inhibitory neurons
+                idcs = rng.choice(
+                    np.arange(0, n_inh + n_exc, dtype=np.int32),
+                    size=mps_rem, replace=False)
+                i_exc_sel = idcs[idcs < n_exc]
+                i_inh_sel = idcs[idcs >= n_exc] - n_exc
+
+        # Set the corresponding entries in the connectivity matrix to true
+        connectivity[0, i_exc_sel, i_post] = True
+        connectivity[1, i_inh_sel, i_post] = True
+    return connectivity
 
 def remove_bias_current(model, ens):
     sig_post_bias = model.sig[ens.neurons]['bias']
@@ -207,8 +275,11 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if conn.decode_bias:
             target_currents += bias
 
+        # Construct the connectivity matrix for this connection
+        connectivity = get_connectivity(model, conn, synapse_types, rng)
+
         # LIF neuron model parameters
-        WE, WI = solver(activities, target_currents, synapse_types, rng)
+        WE, WI = solver(activities, target_currents, connectivity, rng)
 
 #        RMS = np.sqrt(np.mean(np.square(target_currents)))
 #        RMSE = np.sqrt(np.mean(np.square(target_currents -

@@ -159,12 +159,22 @@ def solve_weights_qp(A,
         return np.array(opt['x'])[:n_vars, 0]
 
 class SolverTask(collections.namedtuple('SolverTask', [
-        'Apre', 'Jpost', 'w', 'exc', 'inh', 'iTh', 'nonneg', 'renormalise',
-        'tol', 'reg', 'use_lstsq', 'valid', 'i', 'n_samples', 'Npre_exc'
+        'Apre', 'Jpost', 'w', 'connectivity', 'iTh', 'nonneg', 'renormalise',
+        'tol', 'reg', 'use_lstsq', 'valid', 'i', 'n_samples'
     ])):
     pass
 
 def _solve_single(t):
+    # Fetch the excitatory and inhibitory pre-neurons
+    exc, inh = t.connectivity
+    Npre_exc = np.sum(exc)
+    Npre_inh = np.sum(inh)
+    Npre_tot = Npre_exc + Npre_inh
+
+    # Just abort if there ist nothing to do
+    if Npre_tot == 0:
+        return t.i, np.zeros((2, 0))
+
     # Renormalise the target currents to a maximum magnitude of one and adapt
     # the model weights accordingly. Since it holds
     #
@@ -209,7 +219,7 @@ def _solve_single(t):
 
     # Split the pre activities into neurons marked as excitatory,
     # as well as neurons marked as inhibitory
-    Apre_exc, Apre_inh = t.Apre[:, t.exc], t.Apre[:, t.inh]
+    Apre_exc, Apre_inh = t.Apre[:, exc], t.Apre[:, inh]
 
     # Assemble the "A" and "b" matrices
     A = np.concatenate((
@@ -240,13 +250,13 @@ def _solve_single(t):
         else:
             fws = np.linalg.lstsq(Γ, Υ, rcond=None)[0]
 
-    return t.i, fws[:t.Npre_exc] * Wscale, fws[t.Npre_exc:] * Wscale
+    return t.i, fws[:Npre_exc] * Wscale, fws[Npre_exc:] * Wscale
 
 
 def solve(Apre,
           Jpost,
           ws,
-          neuron_types=None,
+          connectivity=None,
           iTh=None,
           nonneg=True,
           renormalise=True,
@@ -265,16 +275,9 @@ def solve(Apre,
     Npre = Apre.shape[1]
     Npost = Jpost.shape[1]
 
-    # Use an all-to-all connection if neuron_types is set to None
-    if neuron_types is None:
-        neuron_types = np.ones((2, Npre), dtype=np.bool)
-    exc, inh = neuron_types
-
-    # Count each use of a neuron as exciatory/inhibitory
-    # individually
-    Npre_exc = np.sum(exc)
-    Npre_inh = np.sum(inh)
-    Npre_tot = Npre_exc + Npre_inh
+    # Use an all-to-all connection if connectivity is set to None
+    if connectivity is None:
+        connectivity = np.ones((2, Npre, Npost), dtype=np.bool)
 
     # Create a neuron model parameter vector for each neuron, if the parameters
     # are not already in this format
@@ -295,12 +298,13 @@ def solve(Apre,
     # Iterate over each post-neuron individually and solve for weights. Do so
     # in parallel.
     tasks = [SolverTask(
-        Apre, Jpost[:, i], ws[i], exc, inh, iTh,
+        Apre, Jpost[:, i], ws[i], connectivity[:, :, i], iTh,
         nonneg, renormalise, tol, reg, use_lstsq,
-        valid[:, i], i, m, Npre_exc) for i in range(Npost)]
+        valid[:, i], i, m) for i in range(Npost)]
     WE, WI = np.zeros((2, Npre, Npost))
     with multiprocessing.Pool(multiprocessing.cpu_count() // 2) as pool:
         for i, we, wi in pool.imap_unordered(_solve_single, tasks):
+            exc, inh = connectivity[:, :, i]
             WE[exc, i], WI[inh, i] = we, wi
 
     return WE, WI
