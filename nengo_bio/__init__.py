@@ -30,6 +30,7 @@ _warn_omp_num_threads()
 
 from nengo_bio.connection import Connection
 from nengo_bio.ensemble import Ensemble
+from nengo_bio.common import Excitatory, Inhibitory
 
 # Implicitly register the builder components
 import nengo_bio.builder as builder
