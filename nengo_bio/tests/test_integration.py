@@ -23,6 +23,7 @@ T = 10.0
 T_SKIP = 1.0
 
 def run_and_compute_relative_rmse(model, probe, expected_fns):
+    # Run the simulation for the specified time
     with nengo.Simulator(model, progress_bar=None) as sim:
         sim.run(T)
 
@@ -42,7 +43,7 @@ def run_and_compute_relative_rmse(model, probe, expected_fns):
 
 def test_communication_channel():
     f1, f2 = lambda t: np.sin(t), lambda t: np.cos(t)
-    with nengo.Network() as model:
+    with nengo.Network(seed=5892) as model:
         inp_a = nengo.Node(f1)
         inp_b = nengo.Node(f2)
 
@@ -60,9 +61,9 @@ def test_communication_channel():
     assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.1
 
 
-def test_communication_channel_with_radius():
+def test_communication_channel_with_post_radius():
     f1, f2 = lambda t: np.sin(t), lambda t: np.cos(t)
-    with nengo.Network() as model:
+    with nengo.Network(seed=5892) as model:
         inp_a = nengo.Node(f1)
         inp_b = nengo.Node(f2)
 
@@ -75,6 +76,52 @@ def test_communication_channel_with_radius():
 
         bio.Connection((ens_a, ens_b), ens_c)
 
+        probe = nengo.Probe(ens_c, synapse=PROBE_SYNAPSE)
+
+    assert run_and_compute_relative_rmse(model, probe, (f1, f2)) < 0.1
+
+
+def test_communication_channel_with_pre_radius():
+    f1, f2 = lambda t: np.sin(t), lambda t: np.cos(t)
+    with nengo.Network(seed=5892) as model:
+        inp_a = nengo.Node(f1)
+        inp_b = nengo.Node(f2)
+
+        ens_a = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=0.8, radius=2)
+        ens_b = bio.Ensemble(n_neurons=102, dimensions=1, p_exc=0.8, radius=2)
+        ens_c = bio.Ensemble(n_neurons=103, dimensions=2)
+
+        nengo.Connection(inp_a, ens_a)
+        nengo.Connection(inp_b, ens_b)
+
+        bio.Connection((ens_a, ens_b), ens_c)
+
         prb_output = nengo.Probe(ens_c, synapse=PROBE_SYNAPSE)
 
-    assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.1
+    assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.25
+
+
+def test_parisien():
+    with nengo.Network(seed=5892) as model:
+        inp_a = nengo.Node(lambda t: np.sin(t))
+
+        # Excitatory source population
+        ens_source = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=1.0)
+
+        # Inhibitory inter-neuron population
+        ens_inhint = bio.Ensemble(n_neurons=102, dimensions=1, p_inh=1.0)
+                                  #intercepts=nengo.dists.Uniform(-1.5, -0.25))
+
+        # Target population
+        ens_target = bio.Ensemble(n_neurons=103, dimensions=1)
+
+        nengo.Connection(inp_a, ens_source)
+        bio.Connection(ens_source, ens_inhint)
+        bio.Connection((ens_source, ens_inhint), ens_target,
+                       function=lambda x: np.mean(x)**2)
+
+        probe = nengo.Probe(ens_target, synapse=PROBE_SYNAPSE)
+
+    assert run_and_compute_relative_rmse(
+        model, probe, (lambda t: np.sin(t)**2,)) < 0.2
+
