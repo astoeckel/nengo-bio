@@ -16,7 +16,7 @@
 
 import numpy as np
 
-from nengo_bio.common import Excitatory, Inhibitory
+from nengo_bio.common import steal_param, Excitatory, Inhibitory
 from nengo_bio.solvers import SolverWrapper, QPSolver
 from nengo.params import Parameter, BoolParam, IntParam, StringParam, \
                          Default, Unconfigurable
@@ -28,6 +28,16 @@ import nengo.dists
 import nengo.exceptions
 import nengo.synapses
 import nengo.builder
+
+class ConnectionPart(nengo.connection.Connection):
+
+    dales_principle = True
+
+    kind = StringParam('kind', default=None, optional=True)
+
+    def __init__(self, *args, **kw_args):
+        self.kind = steal_param('kind', kw_args, Default)
+        super(ConnectionPart, self).__init__(*args, **kw_args)
 
 class MultiEnsemble(nengo.base.SupportDefaultsMixin):
     """
@@ -293,23 +303,25 @@ class Connection(nengo.config.SupportDefaultsMixin):
         arr_ens, arr_ns, _ = self.pre.flatten()
         for i, (ens, ns) in enumerate(zip(arr_ens, arr_ns)):
             def mkcon(synapse_type, synapse):
-                return nengo.connection.Connection(
+                return ConnectionPart(
                     pre=ens,
                     post=self.post,
                     transform=np.zeros((self.post.size_in, ens.size_out)),
                     seed=self.seed,
                     synapse=synapse,
                     solver=SolverWrapper(
-                        self.solver, i, self, ns, synapse_type))
+                        self.solver, i, self, ns, synapse_type),
+                    kind=str(synapse_type))
+                return conn
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))
 
     def __str__(self):
-        return "<ArbourConnection {}>".format(self._str)
+        return "<Connection {}>".format(self._str)
 
     def __repr__(self):
-        return "<ArbourConnection at {:06X} {}>".format(id(self), self._str)
+        return "<Connection at {:06X} {}>".format(id(self), self._str)
 
     @property
     def _str(self):

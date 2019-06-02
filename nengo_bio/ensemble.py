@@ -17,12 +17,9 @@
 import numpy as np
 import collections
 
-from .common import Excitatory, Inhibitory
-
-from nengo.exceptions import BuildError
+from nengo_bio.common import steal_param, Excitatory, Inhibitory
 
 import nengo.ensemble
-import nengo.params
 import nengo.builder
 
 class Ensemble(nengo.ensemble.Ensemble):
@@ -33,11 +30,33 @@ class Ensemble(nengo.ensemble.Ensemble):
     excitatory and inhibitory neurons.
     """
 
-    p_exc = nengo.params.NumberParam(
-        'p_exc', default=None, optional=True, low=0.0, high=1.0)
+    @staticmethod
+    def _coerce_p_exc_inh(p_exc, p_inh, ens=None):
+        has_p_exc, has_p_inh = not p_exc is None, not p_inh is None
+        if has_p_exc or has_p_inh:
+            # Both p_exc and p_inh are given must sum to one
+            if has_p_exc and has_p_inh:
+                if abs(p_exc + p_inh - 1.0) > 1e-3:
+                    raise ValueError(
+                        "p_exc={} and p_inh={} do not add up to one for {}"
+                        .format(p_exc, p_inh, ens)
+                    )
 
-    p_inh = nengo.params.NumberParam(
-        'p_inh', default=None, optional=True, low=0.0, high=1.0)
+            # At least p_exc is given, check range
+            if has_p_exc:
+                if p_exc < 0.0 or p_exc > 1.0:
+                    raise ValueError(
+                        "p_exc={} must be between 0.0 and 1.0 for {}"
+                        .format(p_exc, ens))
+                p_inh = 1.0 - p_exc
+            # At least p_inh is given, check range
+            elif has_p_inh:
+                if p_inh < 0.0 or p_inh > 1.0:
+                    raise ValueError(
+                        "p_inh={} must be between 0.0 and 1.0 for {}"
+                        .format(p_inh, ens))
+                p_exc = 1.0 - p_inh
+        return p_exc, p_inh
 
     def __init__(self, *args, **kw_args):
         """
@@ -45,14 +64,27 @@ class Ensemble(nengo.ensemble.Ensemble):
         Ensemble class.
         """
 
-        def steal_param(target, param_name, kw_args, default=None):
-            if param_name in kw_args:
-                setattr(target, param_name, kw_args[param_name])
-                del kw_args[param_name]
-            else:
-                setattr(target, param_name, default)
+        self._p_exc, _ = Ensemble._coerce_p_exc_inh(
+            steal_param('p_exc', kw_args), steal_param('p_inh', kw_args), self)
 
-        steal_param(self, 'p_exc', kw_args)
-        steal_param(self, 'p_inh', kw_args)
         super(Ensemble, self).__init__(*args, **kw_args)
+
+    @property
+    def p_exc(self):
+        return self._p_exc
+
+    @property
+    def p_inh(self):
+        if self._p_exc is None:
+            return None
+        else:
+            return 1.0 - self._p_exc
+
+    @p_exc.setter
+    def p_exc(self, value):
+        self._p_exc, _ = Ensemble._coerce_p_exc_inh(value, None, self)
+
+    @p_inh.setter
+    def p_inh(self, value):
+        self._p_exc, _ = Ensemble._coerce_p_exc_inh(None, value, self)
 
