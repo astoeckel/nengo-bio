@@ -21,9 +21,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='nengo_bio',
-    packages=[
-        'nengo_bio'
-    ],
+    packages=find_packages(),
     version='0.1',
     author='Andreas Stöckel',
     author_email='astoecke@uwaterloo.ca',
