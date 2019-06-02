@@ -14,9 +14,8 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-name = 'nengo_bio.builder'
-
 # Explicitly load all the sub-modules to register the builder components
-import nengo_bio.builder.connection as connection
-import nengo_bio.builder.ensemble as ensemble
-import nengo_bio.builder.solvers as solvers
+from . import (
+	connection,
+	ensemble,
+)

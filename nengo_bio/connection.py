@@ -18,6 +18,7 @@ import numpy as np
 
 from nengo_bio.common import steal_param, Excitatory, Inhibitory
 from nengo_bio.solvers import SolverWrapper, QPSolver
+
 from nengo.params import Parameter, BoolParam, IntParam, StringParam, \
                          Default, Unconfigurable
 

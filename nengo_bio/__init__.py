@@ -31,9 +31,11 @@ _warn_omp_num_threads()
 name = "nengo_bio"
 
 # Expose commonly used objects
-from nengo_bio.connection import Connection
-from nengo_bio.ensemble import Ensemble
-from nengo_bio.common import Excitatory, Inhibitory
+from .connection import Connection
+from .ensemble import Ensemble
+from .common import Excitatory, Inhibitory
 
 # Explicitly load the builder submodule to register the builder components
-import nengo_bio.builder as builder
+from . import (
+	builder
+)
