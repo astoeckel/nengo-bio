@@ -175,6 +175,30 @@ def test_get_eval_points_fixed(nengo_ensembles_and_model):
             np.prod(eval_points == [3.0, 4.0, 5.0], axis=1)
         )))
 
+def test_standard_pre_post_objs(nengo_ensembles_and_model):
+    with nengo.Network() as net:
+        ens_a = nengo.Ensemble(n_neurons=11, dimensions=1)
+        ens_b = nengo.Ensemble(n_neurons=12, dimensions=1)
+        conn = Connection(ens_a, ens_b)
+    with nengo.Simulator(net, progress_bar=None) as sim:
+        pass
+
+    synapse_types = get_multi_ensemble_synapse_types(sim.model, conn.pre_obj)
+    connectivity = get_connectivity(conn, synapse_types)
+    assert np.prod(connectivity.flatten()) == 1
+
+def test_no_exc_inh(nengo_ensembles_and_model):
+    with nengo.Network() as net:
+        ens_a = Ensemble(n_neurons=11, dimensions=1)
+        ens_b = Ensemble(n_neurons=12, dimensions=1)
+        conn = Connection(ens_a, ens_b)
+    with nengo.Simulator(net, progress_bar=None) as sim:
+        pass
+
+    synapse_types = get_multi_ensemble_synapse_types(sim.model, conn.pre_obj)
+    connectivity = get_connectivity(conn, synapse_types)
+    assert np.prod(connectivity.flatten()) == 1
+
 def test_get_connectivity(nengo_ensembles_and_model):
     ens_a, ens_b, ens_c, ens_d, model = nengo_ensembles_and_model
 

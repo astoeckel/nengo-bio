@@ -142,7 +142,11 @@ def get_multi_ensemble_synapse_types(model, mens):
     arr_ens, arr_ns, _ = mens.flatten()
     for ens, ns in zip(arr_ens, arr_ns):
         for i, type_ in enumerate((Excitatory, Inhibitory)):
-            synapse_types[i, ns] = model.params[ens].synapse_types[type_]
+            built_ens = model.params[ens]
+            if hasattr(built_ens, "synapse_types"):
+                synapse_types[i, ns] = built_ens.synapse_types[type_]
+            else:
+                synapse_types[i, ns] = np.ones(ens.n_neurons, dtype=np.bool)
     return synapse_types
 
 
