@@ -4,8 +4,8 @@ python:
   - "3.6"
   - "3.7"
 env:
-  - NENGO_VERSION=2.8.0
-  - NENGO_VERSION=master
+  - OMP_NUM_THREADS=1 NENGO_VERSION=2.8.0
+  - OMP_NUM_THREADS=1 NENGO_VERSION=master
 install:
   - if [ "$NENGO_VERSION" = "master" ]; then git clone https://github.com/nengo/nengo; cd nengo; pip install .; cd -; else pip install nengo==$NENGO_VERSION; fi
   - pip install .
