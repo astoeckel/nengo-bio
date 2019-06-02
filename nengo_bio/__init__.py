@@ -35,5 +35,6 @@ from nengo_bio.connection import Connection
 from nengo_bio.ensemble import Ensemble
 from nengo_bio.common import Excitatory, Inhibitory
 
-# Implicitly register the builder components
+# Explicitly load the submodules
 import nengo_bio.builder as builder
+import nengo_bio.internal as internal
