@@ -1,4 +1,4 @@
-![NengoBio Logo](doc/logo.png)
+![NengoBio Logo](doc/logo.png) [![PyPI version](https://badge.fury.io/py/nengo-bio.svg)](https://badge.fury.io/py/nengo-bio)
 
 # NengoBio ‒ Biologically (more) plausible Nengo models
 
