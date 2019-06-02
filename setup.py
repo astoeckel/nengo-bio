@@ -22,7 +22,7 @@ with open("README.md", "r") as fh:
 setup(
     name='nengo_bio',
     packages=find_packages(),
-    version='0.1',
+    version='0.1.1',
     author='Andreas Stöckel',
     author_email='astoecke@uwaterloo.ca',
     description='Dendritic Computation Primitives for Nengo',
