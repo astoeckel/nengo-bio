@@ -188,8 +188,8 @@ def get_connectivity(conn, synapse_types, rng=np.random):
         # We're done if both has_mps_E and has_mps_I are true. Otherwise, select
         # more neurons up to mps.
         if not (has_mps_E and has_mps_I):
-            # If no maximum number of synapses is set, set it to the maximum number
-            # of synapses that are still available
+            # If no maximum number of synapses is set, set it to the maximum
+            # number of synapses that are still available
             if not has_mps:
                 mps_rem = n_exc + n_inh
             else:
@@ -223,8 +223,6 @@ def remove_bias_current(model, ens):
                 # Delete the copy operator and instead add a reset operator
                 del model.operators[i]
                 model.add_op((nengo.builder.operator.Reset(sig_post_in)))
-                return True
-    return False
 
 
 @nengo.builder.Builder.register(SolverWrapper)
@@ -256,9 +254,6 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
 
         # Transform the target values
         if hasattr(nengo.connection, 'Dense'): # Nengo 2.8 compat
-            if not isinstance(conn.transform, nengo.connection.Dense):
-                raise nengo.exceptions.BuildError(
-                    "Non-compositional solvers only work with Dense transforms")
             transform = conn.transform.sample(rng=rng)
         else:
             transform = conn.transform

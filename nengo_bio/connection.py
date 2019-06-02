@@ -313,7 +313,6 @@ class Connection(nengo.config.SupportDefaultsMixin):
                     solver=SolverWrapper(
                         self.solver, i, self, ns, synapse_type),
                     kind=str(synapse_type))
-                return conn
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))

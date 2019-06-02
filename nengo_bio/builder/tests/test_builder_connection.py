@@ -270,3 +270,26 @@ def test_get_connectivity(nengo_ensembles_and_model):
         assert np.sum(connectivity[0, :101, i]) == 4
         assert np.sum(connectivity[1, 101:, i]) == 10
 
+    # ens_a is excitatory, ens_b is inhibitory
+    with model.toplevel:
+        conn = Connection((ens_a, ens_b), ens_c,
+        max_n_post_synapses_exc=4)
+    synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
+    connectivity = get_connectivity(conn, synapse_types)
+
+    for i in range(ens_c.n_neurons):
+        assert np.sum(connectivity[0, :, i]) == 4
+        assert np.sum(connectivity[1, :, i]) == 102
+        assert np.sum(connectivity[0, :101, i]) == 4
+        assert np.sum(connectivity[1, 101:, i]) == 102
+
+def test_connection_invalid_max_synapses():
+    with pytest.raises(nengo.exceptions.BuildError) as _:
+        with nengo.Network() as net:
+            ens_a = Ensemble(n_neurons=101, dimensions=1)
+            ens_b = Ensemble(n_neurons=102, dimensions=1)
+            Connection(ens_a, ens_b,
+                max_n_post_synapses=10, max_n_post_synapses_exc=10,
+                max_n_post_synapses_inh=10)
+        with nengo.Simulator(net) as sim:
+            pass
