@@ -8,8 +8,10 @@ env:
   - NENGO_VERSION=master
 install:
   - if [ "$NENGO_VERSION" = "master" ]; then git clone https://github.com/nengo/nengo; cd nengo; pip install .; cd -; else pip install nengo==$NENGO_VERSION; fi
-  - pip install coveralls pytest-cov
+  - pip install --upgrade coveralls coverage
   - pip install .
-script: OMP_NUM_THREADS=1 pytest --cov nengo_bio nengo_bio/
+script:
+  - OMP_NUM_THREADS=1 coverage run --source nengo_bio -m pytest nengo_bio/
 after_success:
+  - coverage report
   - coveralls
