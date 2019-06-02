@@ -16,15 +16,21 @@
 
 from setuptools import setup, find_packages
 
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
 setup(
     name='nengo_bio',
     packages=[
         'nengo_bio'
     ],
-    version='1.0',
+    version='0.1',
     author='Andreas Stöckel',
+    author_email='astoecke@uwaterloo.ca',
     description='Dendritic Computation Primitives for Nengo',
-    url='https://github.com/astoeckel/nengo_bio',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url='https://github.com/astoeckel/nengo-bio',
     license='GPLv3',
     classifiers=[
         'Development Status :: 3 - Alpha',

@@ -21,13 +21,16 @@ def _warn_omp_num_threads():
     var = "OMP_NUM_THREADS"
     if ((not var in os.environ) or (os.environ[var] != "1")):
         warnings.warn(
-            "\n𝗡𝗘𝗡𝗚𝗢𝗕𝗜𝗢 𝗪𝗔𝗥𝗡𝗜𝗡𝗚\n"
-            "The environment variable OMP_NUM_THREADS is not set to \"1\".\n"
-            "This will results in reduced performance when solving for\n"
-            "neuron weights.\n",
+            "The environment variable OMP_NUM_THREADS is not set to \"1\". "
+            "This will result in reduced performance when solving for "
+            "neuron weights.",
             RuntimeWarning)
 _warn_omp_num_threads()
 
+# Set the package name
+name = "nengo_bio"
+
+# Expose commonly used objects
 from nengo_bio.connection import Connection
 from nengo_bio.ensemble import Ensemble
 from nengo_bio.common import Excitatory, Inhibitory
