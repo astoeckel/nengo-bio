@@ -36,7 +36,7 @@ class MultiInputNeuronType(NeuronType):
             "Neurons of type can only be used in conjunction with"
             "nengo_bio.Connection")
 
-    def tune(self, dt, ens, rng=np.random):
+    def tune(self, dt, model, ens, rng=np.random):
         """
         Called as part of the build process to give the neuron type the chance
         to determine parameters that are required for the weight solver or the
@@ -147,12 +147,17 @@ class TwoCompLIFCond(MultiInputNeuronType):
         tau_ref, tau_rc, i_th = self.lif_parameters()
         return lif_utils.lif_rate(J / i_th, tau_ref, tau_rc)
 
+    def lif_rate_inv(self, a):
+        tau_ref, tau_rc, i_th = self.lif_parameters()
+        return lif_utils.lif_rate_inv(a, tau_ref, tau_rc) * i_th
+
     def gain_bias(self, max_rates, intercepts):
+        # Make sure the input is a 1D array
         max_rates = np.array(max_rates, dtype=float, copy=False, ndmin=1)
         intercepts = np.array(intercepts, dtype=float, copy=False, ndmin=1)
 
-        tau_rc = self.c_som / self.g_leak_som
-        tau_ref = self.tau_ref + self.tau_spike
+        # Make sure the maximum rates are not surpassing the maximally
+        # attainable rate
         i_th = self.threshold_current()
         inv_tau_ref = 1. / tau if tau > 0 else np.inf
         if np.any(max_rates > inv_tau_ref):
@@ -161,10 +166,7 @@ class TwoCompLIFCond(MultiInputNeuronType):
                                   "period ({0.3f})".format(inv_tau_ref),
                                   attr='max_rates', obj=self)
 
-        tau_rc = 
-        x = 1.0 / (1 - np.exp(
-            (tau - self.c_som / self.g_leak_som * (1.0 / max_rates)) / self.tau_rc))
-        gain = (1 - x) / (intercepts - 1.0)
-        bias = 1 - gain * intercepts
+        
+
         return gain, bias
 
