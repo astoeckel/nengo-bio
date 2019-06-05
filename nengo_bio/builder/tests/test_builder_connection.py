@@ -315,5 +315,5 @@ def test_connection_invalid_max_synapses():
             Connection(ens_a, ens_b,
                 max_n_post_synapses=10, max_n_post_synapses_exc=10,
                 max_n_post_synapses_inh=10)
-        with nengo.Simulator(net) as sim:
+        with nengo.Simulator(net, progress_bar=None) as sim:
             pass
