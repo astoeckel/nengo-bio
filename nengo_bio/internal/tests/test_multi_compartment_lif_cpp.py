@@ -22,16 +22,16 @@ from nengo_bio.internal.multi_compartment_lif_parameters import (
 )
 from nengo_bio.internal.multi_compartment_lif_cpp import compile_simulator_cpp
 
-def test_compile_simulator_cpp():
+def test_compile_simulator_cpp_subsample():
     # Simulation parameters
     n_neurons = 1
-    T = 0.1
+    T = 1.0
     dt = 1e-4
     ts = np.arange(0, T, dt)
 
     # Generate some somatic and dendritic parameters
     params_som = SomaticParameters()
-    params_den = DendriticParameters.make_two_comp_lif(input_mul=1e-9)
+    params_den = DendriticParameters.make_two_comp_lif()
 
     # Compile a simulator for these parameters
     sim_class_ss1 = compile_simulator_cpp(params_som, params_den, dt=dt, ss=1)
@@ -39,14 +39,18 @@ def test_compile_simulator_cpp():
 
     # Run the simulation
     N = ts.size
-    trace_v_ss1 = np.empty((N, n_neurons, params_den.n_comp))
-    trace_v_ss10 = np.empty((N, n_neurons, params_den.n_comp))
-    sim_ss1 = sim_class_ss1(n_neurons)
-    sim_ss10 = sim_class_ss10(n_neurons)
+    sim_ss1, sim_ss10 = sim_class_ss1(n_neurons), sim_class_ss10(n_neurons)
+    spikes_ss1, spikes_ss10 = np.zeros((2, N))
+    gE, gI = 50e-9, 0e-9
     for i in range(N):
-        sim_ss1.step_math(np.tile(((50, 0),), (n_neurons, 1)))
-        sim_ss10.step_math(np.tile(((50, 0),), (n_neurons, 1)))
-        trace_v_ss1[i] = sim_ss1.state[:, :-1]
-        trace_v_ss10[i] = sim_ss10.state[:, :-1]
+        spikes_ss1[i] = \
+            sim_ss1.step_math(np.tile(((gE, gI),), (n_neurons, 1)))[0]
+        spikes_ss10[i] = \
+            sim_ss10.step_math(np.tile(((gE, gI),), (n_neurons, 1)))[0]
 
-    assert np.sqrt(np.mean(np.square(trace_v_ss1 - trace_v_ss10)[:, :, 1])) < 1e-3
+    spike_times_ss1 = np.where(spikes_ss1 != 0)[0] * dt
+    spike_times_ss10 = np.where(spikes_ss10 != 0)[0] * dt
+
+    assert spike_times_ss1.size == spike_times_ss10.size == 33
+    assert np.sqrt(np.mean((spike_times_ss1 - spike_times_ss10) ** 2)) < 2e-3
+

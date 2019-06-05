@@ -16,16 +16,11 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
  
-#include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
-#include <fstream>
 #include <random>
 
 #include <Eigen/Dense>
-#include <Eigen/Eigenvalues>
 
 using namespace Eigen;
 
@@ -106,11 +101,6 @@ public:
 	 */
 	static void step_math(uint32_t n_neurons, double *xs, double *state, double *out)
 	{
-		/**
-		 * Eigenvalue/eigenvector solver.
-		 */
-		SelfAdjointEigenSolver<MatA> eigs;
-
 		// Iterate over all neurons in the population
 		for (size_t i = 0; i < n_neurons; i++) {
 			// Fetch the input data
@@ -120,33 +110,16 @@ public:
 			MatA A = calc_A(x);
 			VecB b = calc_b(x);
 
-			// Compute the eigenvalues and eigenvectors of the A matrix
-			eigs.compute(A);
-			const Matrix<double, n_comp, 1> &L = eigs.eigenvalues();
-			const Matrix<double, n_comp, n_comp> &Q = eigs.eigenvectors();
-
-			// Compute the equilibrium potential using the
-			// eigen-decomposition used above; invert the A matrix by using
-			// the reciprocal of the eigenvalues. Note that this is
-			// definitively not the best way to solve a linear equation.
-			// However, since we have to compute the eigen decomposition
-			// anyways, and the matrices used here are relatively small,
-			// this should work.
-			const Matrix<double, n_comp, 1> Linv = 1.0 / L.array();
-			const Matrix<double, n_comp, n_comp> Qinv =
-			    Q * Linv.asDiagonal();
-			const VecV vEq = -Qinv * Q.transpose() * b;
-
 			// Access to the current state: membrane poential and refractoriness
 			Map<VecV> v(&state[i * (n_comp + 1)]);
 			double &tref = state[i * (n_comp + 1) + n_comp];
 
-			// Compute the membrane potential for an offset of dt
-			const MatA eA = expm(Q, L, dt);
+			// Write the initial output value
+			out[i] = 0.;
 
 			// Advance the simulation for the number of subsamples
 			for (size_t s = 0; s < ss; s++) {
-				v = vEq + (eA * (v - vEq));
+				v += (A * v + b) * dt;
 
 				// Handle the refractory/spike period for the somatic
 				// compartment

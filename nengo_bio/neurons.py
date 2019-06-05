@@ -21,7 +21,7 @@ from nengo.neurons import NeuronType
 from nengo.params import IntParam, NumberParam
 
 from nengo_bio.common import Excitatory, Inhibitory
-from nengo_bio.internal import lif_utils
+from nengo_bio.internal import (lif_utils, multi_compartment_lif_parameters)
 
 class MultiInputNeuronType(NeuronType):
     inputs = ()
@@ -49,9 +49,9 @@ class MultiInputNeuronType(NeuronType):
         """
         Generates an efficient simulator for this neuron type.
 
-        Returns two objects: a callable simulator object and the initial state.
-        The simulator object receives the input (read only), state (read/write),
-        and an output for each neuron (write only).
+        Returns a callable "step_math" function. The "step_math" function
+        receives the input and returns the output (whether a neuron spiked or
+        not), as well as the current state.
 
         Parameters
         ----------
@@ -66,7 +66,6 @@ class MultiInputNeuronType(NeuronType):
         """
         raise NotImplementedError(
             "MultiInputNeuronType must implement the \"compile\" function.")
-
 
 
 class TwoCompLIF(MultiInputNeuronType):
@@ -169,18 +168,20 @@ class TwoCompLIF(MultiInputNeuronType):
         # Make sure the maximum rates are not surpassing the maximally
         # attainable rate
         tau_ref, _, i_th = self._lif_parameters()
-        inv_tau_ref = 1. / tau_ref if tau_ref > 0 else np.inf
+        inv_tau_ref = 1. / tau_ref if tau_ref > 0. else np.inf
         if np.any(max_rates > inv_tau_ref):
-            raise ValidationError("Max rates must be below the inverse "
-                                  "of the sum of the refractory and spike "
-                                  "period ({0.3f})".format(inv_tau_ref),
-                                  attr='max_rates', obj=self)
+            raise ValidationError(
+                "Max rates must be below the inverse "
+                "of the sum of the refractory and spike "
+                "period ({0.3f})".format(inv_tau_ref),
+                attr='max_rates',
+                obj=self)
 
         # Solve the following linear system for gain, bias
         #   i_th  = gain * intercepts + bias
         #   i_max = gain              + bias
         i_max = self._lif_rate_inv(max_rates)
-        gain = (i_max - i_th) / (1 - intercepts)
+        gain = (i_max - i_th) / (1. - intercepts)
         bias = i_max - gain
 
         return gain, bias
@@ -200,3 +201,42 @@ class TwoCompLIF(MultiInputNeuronType):
 
     def rates(self, x, gain, bias):
         return self._lif_rate(gain * x + bias)
+
+    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False):
+        # Create the parameter arrays describing this particular multi
+        # compartment LIF neuron
+        params_som = multi_compartment_lif_parameters.SomaticParameters(
+            tau_ref=self.tau_ref,
+            tau_spike=self.tau_spike,
+            v_th=self.v_th,
+            v_reset=self.v_reset,
+            v_spike=self.v_spike,
+        )
+        params_den = multi_compartment_lif_parameters.DendriticParameters.\
+            make_two_comp_lif(
+            C_som=self.C_som,
+            C_den=self.C_den,
+            g_leak_som=self.g_leak_som,
+            g_leak_den=self.g_leak_den,
+            g_couple=self.g_couple,
+            E_rev_leak=self.E_rev_leak,
+            E_rev_exc=self.E_rev_exc,
+            E_rev_inh=self.E_rev_inh
+        )
+
+        # Either instantiate the C++ simulator or the reference simulator
+        import nengo_bio.internal.multi_compartment_lif_cpp as mcl_cpp
+        import nengo_bio.internal.multi_compartment_lif_python as mcl_python
+        if force_python_sim or not mcl_cpp.supports_cpp():
+            sim_class = mcl_python.compile_simulator_python(
+                params_som, params_den, dt=dt, ss=self.subsample)
+        else:
+            sim_class = mcl_cpp.compile_simulator_cpp(
+                params_som, params_den, dt=dt, ss=self.subsample)
+
+        # Create a new simulator instance and wrap it in a function
+        sim = sim_class(n_neurons)
+        def step_math(x):
+            sim.step_math(x)
+            return sim.out, sim.state
+        return step_math

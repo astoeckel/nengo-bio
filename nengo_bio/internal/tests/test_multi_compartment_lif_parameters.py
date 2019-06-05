@@ -29,14 +29,13 @@ def test_dendritic_parameters_two_comp_lif():
         g_couple=50e-9,
         E_rev_leak=-65e-3,
         E_rev_exc=20e-3,
-        E_rev_inh=-75e-3,
-        input_mul=1e-9)
+        E_rev_inh=-75e-3)
 
     assert params.n_comp == 2
     assert params.n_inputs == 2
-    assert np.allclose(params.A, [[ 0.,  0.], [-1., -1.]])
+    assert np.allclose(params.A, [[ 0.,  0.], [-1e9, -1e9]])
     assert np.allclose(params.a_const, [-100., -100.])
-    assert np.allclose(params.B, [[ 0.,  0.], [0.02, -0.075]])
+    assert np.allclose(params.B, [[ 0.,  0.], [0.02e9, -0.075e9]])
     assert np.allclose(params.b_const, [-3.25, -3.25])
     assert np.allclose(params.C, [[0., 50.], [50., 0.]])
 

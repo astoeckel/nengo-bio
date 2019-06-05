@@ -19,6 +19,9 @@ from nengo_bio.internal.multi_compartment_lif_parameters import (
     DendriticParameters,
 )
 
+_tmp_dir = None  # Directory compiled libraries are stored in
+_compiled_library_map = {}  # Map storing the Simulator objects
+_supports_cpp = True
 
 def _generate_simulator_cpp_code(f, params_som, params_den, dt=1e-3, ss=10):
     """
@@ -151,6 +154,7 @@ def _compile_cpp_library(code, tar, debug=False):
                     '-O0' if debug else '-O3',  # Toggle optimisation
                     '-Wall',
                     '-Wextra',
+                    '-Wno-deprecated-copy',
                     '-fno-exceptions',  # This code does not use exceptions
                     '-fno-rtti',  # We don't need no runtime-type information
                     '-ffast-math',  # Be sloppy, we don't have non-finite math
@@ -188,10 +192,6 @@ def _compile_cpp_library(code, tar, debug=False):
             raise Exception("Error while compiling the C++ code:\n" + stderr)
         elif len(stderr) > 0:
             print(stderr)
-
-
-_tmp_dir = None  # Directory compiled libraries are stored in
-_compiled_library_map = {}  # Map storing the Simulator objects
 
 
 def _create_tmp_dir():
@@ -319,13 +319,11 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
     return Simulator
 
 
-_supports_cpp = True
-
-
 def supports_cpp():
     global _supports_cpp
     if _supports_cpp is None:
         import os
+        import warnings
 
         # Create a user-accessible temporary directory
         tar = os.path.join(_create_tmp_dir(), 'test.so')
@@ -338,6 +336,12 @@ def supports_cpp():
             _supports_cpp = True
         except:
             _supports_cpp = False
+            warnings.warn(
+                "Cannot activate C++ support for multi-compartment LIF "
+                "neurons. The simulator will fallback to a Python "
+                "implementation. This will be slow. Please make sure you have "
+                "a recent version of g++ and Eigen3 installed.",
+                RuntimeWarning)
 
         # Remove the target file
         if os.path.exists(tar):
