@@ -69,7 +69,7 @@ class MultiInputNeuronType(NeuronType):
 
 
 
-class TwoCompLIFCond(MultiInputNeuronType):
+class TwoCompLIF(MultiInputNeuronType):
     """
     A two-compartment LIF neuron with conductance based synapses.
 
@@ -135,20 +135,30 @@ class TwoCompLIFCond(MultiInputNeuronType):
         Returns the input current at which the neuron is supposed to start
         spiking.
         """
-        return (self.v_th - self.e_rev_leak) * self.g_leak_som
+        return (self.v_th - self.E_rev_leak) * self.g_leak_som
 
-    def lif_parameters(self):
+    def _lif_parameters(self):
+        """
+        Returns the LIF parameters of the somatic compartments. These parameters
+        are used in the gain/bias computations.
+        """
         tau_ref = self.tau_spike + self.tau_ref
         tau_rc = self.C_som / self.g_leak_som
         i_th = self.threshold_current()
         return tau_ref, tau_rc, i_th
 
-    def lif_rate(self, J):
-        tau_ref, tau_rc, i_th = self.lif_parameters()
+    def _lif_rate(self, J):
+        """
+        Returns the LIF rate for a given input current.
+        """
+        tau_ref, tau_rc, i_th = self._lif_parameters()
         return lif_utils.lif_rate(J / i_th, tau_ref, tau_rc)
 
-    def lif_rate_inv(self, a):
-        tau_ref, tau_rc, i_th = self.lif_parameters()
+    def _lif_rate_inv(self, a):
+        """
+        Returns the input current resulting in the given rate.
+        """
+        tau_ref, tau_rc, i_th = self._lif_parameters()
         return lif_utils.lif_rate_inv(a, tau_ref, tau_rc) * i_th
 
     def gain_bias(self, max_rates, intercepts):
@@ -158,15 +168,35 @@ class TwoCompLIFCond(MultiInputNeuronType):
 
         # Make sure the maximum rates are not surpassing the maximally
         # attainable rate
-        i_th = self.threshold_current()
-        inv_tau_ref = 1. / tau if tau > 0 else np.inf
+        tau_ref, _, i_th = self._lif_parameters()
+        inv_tau_ref = 1. / tau_ref if tau_ref > 0 else np.inf
         if np.any(max_rates > inv_tau_ref):
             raise ValidationError("Max rates must be below the inverse "
                                   "of the sum of the refractory and spike "
                                   "period ({0.3f})".format(inv_tau_ref),
                                   attr='max_rates', obj=self)
 
-        
+        # Solve the following linear system for gain, bias
+        #   i_th  = gain * intercepts + bias
+        #   i_max = gain              + bias
+        i_max = self._lif_rate_inv(max_rates)
+        gain = (i_max - i_th) / (1 - intercepts)
+        bias = i_max - gain
 
         return gain, bias
 
+    def max_rates_intercepts(self, gain, bias):
+        # The max rate is defined as the rate for the input current gain + bias
+        max_rates = self._lif_rate(gain + bias)
+
+        # Solve i_th = gain * intercept + bias for the intercept; warn about
+        # invalid values
+        intercepts = (self.threshold_current() - bias) / gain
+        if not np.all(np.isfinite(intercepts)):
+            warnings.warn("Non-finite values detected in `intercepts`; this "
+                          "probably means that `gain` was too small.")
+
+        return max_rates, intercepts
+
+    def rates(self, x, gain, bias):
+        return self._lif_rate(gain * x + bias)
