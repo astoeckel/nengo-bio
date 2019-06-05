@@ -34,11 +34,17 @@ class ConnectionPart(nengo.connection.Connection):
 
     dales_principle = True
 
-    kind = StringParam('kind', default=None, optional=True)
-
     def __init__(self, *args, **kw_args):
-        self.kind = steal_param('kind', kw_args, Default)
+        self._synapse_type = steal_param('synapse_type', kw_args, Default)
         super(ConnectionPart, self).__init__(*args, **kw_args)
+
+    @property
+    def synapse_type(self):
+        return self._synapse_type
+
+    @property
+    def kind(self):
+        return str(self._synapse_type)
 
 class MultiEnsemble(nengo.base.SupportDefaultsMixin):
     """
@@ -312,7 +318,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                     synapse=synapse,
                     solver=SolverWrapper(
                         self.solver, i, self, ns, synapse_type),
-                    kind=str(synapse_type))
+                    synapse_type=synapse_type)
             self.connections.append((
                 mkcon(Excitatory, synapse_exc),
                 mkcon(Inhibitory, synapse_inh)))

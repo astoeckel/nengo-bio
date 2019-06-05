@@ -14,6 +14,7 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from nengo_bio.internal.multi_compartment_lif_sim import make_simulator_class
 from nengo_bio.internal.multi_compartment_lif_parameters import (
     SomaticParameters,
     DendriticParameters,
@@ -22,6 +23,7 @@ from nengo_bio.internal.multi_compartment_lif_parameters import (
 _tmp_dir = None  # Directory compiled libraries are stored in
 _compiled_library_map = {}  # Map storing the Simulator objects
 _supports_cpp = True
+
 
 def _generate_simulator_cpp_code(f, params_som, params_den, dt=1e-3, ss=10):
     """
@@ -119,8 +121,14 @@ struct Parameters {
 }
 
 extern "C" { // Exported C API
-void step_math(uint32_t n_neurons, double *xs, double *state, double *out) {
-    Simulator<Parameters>::step_math(n_neurons, xs, state, out);
+void step_math(uint32_t n_neurons, double *state, double *out""")
+    for i in range(pD.n_inputs):
+        f.write(", double *x{}".format(i))
+    f.write(""") {
+    const double *xs[""" + str(pD.n_inputs) + """] = {""")
+    f.write(", ".join("x{}".format(i) for i in range(pD.n_inputs)))
+    f.write("""};
+    Simulator<Parameters>::step_math(n_neurons, state, out, xs);
 }
 };
 """)
@@ -151,7 +159,7 @@ def _compile_cpp_library(code, tar, debug=False):
                     '-std=c++11',
                     '-march=native',  # Compile for this particular computer
                     '-g' if debug else '-DNDEBUG',  # Toggle debug code
-                    '-O0' if debug else '-O3',  # Toggle optimisation
+                    '-O1' if debug else '-O3',  # Toggle optimisation
                     '-Wall',
                     '-Wextra',
                     '-Wno-deprecated-copy',
@@ -260,63 +268,28 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
     code = f.getvalue().encode('utf-8')
     sha_hash = _compute_code_hash(code)
     key = "multi_comp_lif_" + sha_hash[:8]
-    if key in _compiled_library_map:
-        return _compiled_library_map[key]
+    if not key in _compiled_library_map:
+        # Compile the C++ code to a library
+        libpath = os.path.join(_create_tmp_dir(), key + '.so')
+        if not os.path.exists(libpath):
+            _compile_cpp_library(code, libpath)
 
-    # Compile the C++ code to a library
-    libpath = os.path.join(_create_tmp_dir(), key + '.so')
-    if not os.path.exists(libpath):
-        _compile_cpp_library(code, libpath)
+        # Load the C library
+        c_double_p = POINTER(c_double)
+        lib = cdll.LoadLibrary(libpath)
+        c_step_math = lib.step_math
+        c_step_math.argtypes = [c_uint32, c_double_p, c_double_p] + [c_double_p] * params_den.n_inputs
 
-    # Load the C library
-    c_double_p = POINTER(c_double)
-    c_uint32_p = POINTER(c_uint32)
+        def step_math(self, out, *xs):
+            pstate = self.state.ctypes.data_as(c_double_p)
+            pout = out.ctypes.data_as(c_double_p)
+            pxs = [x.ctypes.data_as(c_double_p) for x in xs]
+            c_step_math(c_uint32(self.n_neurons), pstate, pout, *pxs)
 
-    lib = cdll.LoadLibrary(libpath)
-    c_step_math = lib.step_math
-
-    dt_, ss_ = dt, ss
-
-    class Simulator:
-
-        n_comp = params_den.n_comp
-        n_inputs = params_den.n_inputs
-        dt = dt_
-        ss = ss_
-
-        def __init__(self, n_neurons):
-            # Copy the number of neurons
-            self.n_neurons = n_neurons
-
-            # Initialize the state matrix
-            self.state = np.empty((n_neurons, self.n_comp + 1),
-                                  order='C',
-                                  dtype=np.float64)
-            self.state[:, :-1] = params_som.v_reset
-            self.state[:, -1] = 0
-
-            # Initialize the output vector
-            self.out = np.zeros((n_neurons), order='C', dtype=np.float64)
-            self.out.flags.writeable = False
-
-        def step_math(self, x):
-            # Make sure the input has the correct size and datatype
-            x = np.asarray(x, order='C', dtype=np.float64)
-            assert x.size >= self.n_inputs * self.n_neurons
-
-            # Advance the simulation
-            c_step_math(
-                c_uint32(self.n_neurons), x.ctypes.data_as(c_double_p),
-                self.state.ctypes.data_as(c_double_p),
-                self.out.ctypes.data_as(c_double_p))
-
-            # Return the otuput
-            return self.out
-
-    # Register the above function for the specific neuron type and return it
-    _compiled_library_map[key] = Simulator
-
-    return Simulator
+        # Register the above function for the specific neuron type and return it
+        _compiled_library_map[key] = make_simulator_class(
+            step_math, params_som, params_den, dt, ss)
+    return _compiled_library_map[key]
 
 
 def supports_cpp():

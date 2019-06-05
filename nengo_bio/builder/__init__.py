@@ -16,6 +16,7 @@
 
 # Explicitly load all the sub-modules to register the builder components
 from . import (
-	connection,
-	ensemble,
+    connection,
+    ensemble,
+    neurons,
 )

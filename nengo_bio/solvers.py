@@ -62,7 +62,8 @@ class QPSolver(ExtendedSolver):
 
     def __call__(self, A, J, connectivity, rng=np.random):
         # Neuron model parameters. For now we only support current-based LIF
-        ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
+#        ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
+        ws = np.array((0.0, 0.01, -0.005, 1.0, 0.0, 0.0))
 
         # Determine the final regularisatio nparameter
         reg = (self.reg * np.max(A))**2 * A.shape[1]

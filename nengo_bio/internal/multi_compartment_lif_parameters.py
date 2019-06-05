@@ -73,6 +73,23 @@ class DendriticParameters:
         return self.A.shape[1]
 
     @staticmethod
+    def make_lif(C_som, g_leak_som, E_rev_leak, input_mul=1.):
+        """
+        This function creates a DendriticParameters instance describing the
+        parameters of a single-compartment, current-based LIF neuron.
+        """
+
+        A = np.array(((0., 0.), )) / C_som
+        a_const = np.array((-g_leak_som, )) / C_som
+
+        B = np.array(((input_mul, -input_mul), )) / C_som
+        b_const = np.array((E_rev_leak * g_leak_som, )) / C_som
+
+        C = np.array(((0., ), )) / C_som
+
+        return DendriticParameters(A, a_const, B, b_const, C)
+
+    @staticmethod
     def make_two_comp_lif(C_som=1e-9,
                           C_den=1e-9,
                           g_leak_som=50e-9,
@@ -80,7 +97,8 @@ class DendriticParameters:
                           g_couple=50e-9,
                           E_rev_leak=-65e-3,
                           E_rev_exc=20e-3,
-                          E_rev_inh=-75e-3):
+                          E_rev_inh=-75e-3,
+                          input_mul=1.):
         """
         This function creates a DendriticParameters instance describing the
         parameters of a two-compartment LIF neuron.
@@ -88,15 +106,17 @@ class DendriticParameters:
 
         Cs = np.array((C_som, C_den))
 
-        A = np.array(((0, 0), (-1., -1.))) / Cs[:, None]
+        A = np.array(((0., 0.), (-input_mul, -input_mul))) / Cs[:, None]
         a_const = np.array(
             (-(g_leak_som + g_couple), -(g_leak_den + g_couple))) / Cs
 
-        B = np.array(((0, 0), (E_rev_exc, E_rev_inh))) / Cs[:, None]
+        B = np.array(
+            ((0., 0.),
+             (input_mul * E_rev_exc, input_mul * E_rev_inh))) / Cs[:, None]
         b_const = np.array(
             (E_rev_leak * g_leak_som, E_rev_leak * g_leak_den)) / Cs
 
-        C = np.array(((0, g_couple), (g_couple, 0))) / Cs[:, None]
+        C = np.array(((0., g_couple), (g_couple, 0.))) / Cs[:, None]
 
         return DendriticParameters(A, a_const, B, b_const, C)
 

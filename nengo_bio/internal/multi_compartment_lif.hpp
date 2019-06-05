@@ -15,10 +15,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
+
 #include <cstddef>
 #include <cstdint>
-#include <random>
 
 #include <Eigen/Dense>
 
@@ -47,7 +46,7 @@ private:
 	 * Simulator-specific constants
 	 */
 	static constexpr size_t ss = Parameters::ss;
-	static constexpr double dt = Parameters::dt / ss;
+	static constexpr double dt = Parameters::dt / Parameters::ss;
 	static constexpr double dt_inv = 1.0 / Parameters::dt;
 
 	/*
@@ -99,12 +98,16 @@ public:
 	 * @param out is the target array that determines whether a neuron
 	 * spiked (entry set to true) or did not spike (entry set to false).
 	 */
-	static void step_math(uint32_t n_neurons, double *xs, double *state, double *out)
+	static void step_math(uint32_t n_neurons, double *state, double *out,
+	                      const double **xs)
 	{
 		// Iterate over all neurons in the population
 		for (size_t i = 0; i < n_neurons; i++) {
-			// Fetch the input data
-			const VecX x(&xs[i * n_inputs]);
+			// Fetch the input data for this neuron
+			VecX x;
+			for (size_t j = 0; j < n_inputs; j++) {
+				x[j] = xs[j][i];
+			}
 
 			// Compute the A-matrix and the b-vector for this sample
 			MatA A = calc_A(x);
@@ -142,6 +145,5 @@ public:
 			}
 		}
 	}
-
 };
 }  // namespace

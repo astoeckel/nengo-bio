@@ -18,11 +18,15 @@ import warnings
 import numpy as np
 
 from nengo_bio.common import Excitatory, Inhibitory
+from nengo_bio.connection import ConnectionPart, Connection
 from nengo_bio.solvers import SolverWrapper, ExtendedSolver
+from nengo_bio.neurons import MultiChannelNeuronType
 
 from nengo.exceptions import NengoWarning, BuildError
+from nengo.ensemble import Ensemble, Neurons
 
 import nengo.builder
+from nengo.builder.operator import Copy, Reset
 
 class BuiltConnection:
     def __init__(self):
@@ -219,14 +223,17 @@ def get_connectivity(conn, synapse_types, rng=np.random):
     return connectivity
 
 def remove_bias_current(model, ens):
+    if not 'bias' in model.sig[ens.neurons]:
+        return
+
     sig_post_bias = model.sig[ens.neurons]['bias']
     sig_post_in = model.sig[ens.neurons]['in']
     for i, op in enumerate(model.operators):
-        if isinstance(op, nengo.builder.operator.Copy):
+        if isinstance(op, Copy):
             if (op.src is sig_post_bias) and (op.dst is sig_post_in):
                 # Delete the copy operator and instead add a reset operator
                 del model.operators[i]
-                model.add_op((nengo.builder.operator.Reset(sig_post_in)))
+                model.add_op((Reset(sig_post_in)))
 
 
 @nengo.builder.Builder.register(SolverWrapper)
@@ -243,6 +250,10 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         # Remove the bias current from the target ensemble
         if conn.decode_bias:
             remove_bias_current(model, conn.post_obj)
+        elif isinstance(conn.post_obj.neuron_type, MultiChannelNeuronType):
+            raise BuildError(
+                "decode_bias=False on connection {} invalid for post objects "
+                "with multi-channel neurons.".format(conn))
 
         # Fetch the evaluation points, activites, and synapse types for the
         # entire MultiEnsemble
@@ -280,13 +291,14 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         # LIF neuron model parameters
         WE, WI = solver(activities, target_currents, connectivity, rng)
 
-#        RMS = np.sqrt(np.mean(np.square(target_currents)))
-#        RMSE = np.sqrt(np.mean(np.square(target_currents -
-#               (activities @ WE - activities @ WI))))
-#        print(conn.label, RMS, RMSE / RMS, np.mean(WE + WI))
+        # If we're not targeting a MultiChannelNeuronType there really isn't
+        # a distinction between excitatory and inhibitory input weights. Hence,
+        # we must negate the inhibitory weights
+        if not isinstance(conn.post_obj.neuron_type, MultiChannelNeuronType):
+            WI = -WI
 
-        built_connection.weights[Excitatory] =  WE
-        built_connection.weights[Inhibitory] = -WI
+        built_connection.weights[Excitatory] = WE
+        built_connection.weights[Inhibitory] = WI
     else:
         built_connection = model.params[conn]
 
@@ -294,3 +306,45 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         built_connection.weights[solver.synapse_type][solver.neuron_indices].T)
 
     return None, W, None
+
+@nengo.builder.Builder.register(ConnectionPart)
+def build_connection(model, conn):
+    # Run the original build_connection. This will trigger the above
+    # build_solver function
+    nengo.builder.connection.build_connection(model, conn)
+
+    # Fetch the ensemble the connection part is connected to. Abort if the
+    # target is not an ensemble
+    if isinstance(conn.post_obj, Neurons):
+        ens = conn.post_obj.ensemble
+    elif isinstance(conn.post_obj, Ensemble):
+        ens = conn.post_obj
+    else:
+        return
+
+    # Nothing to do if the post neuron type is not a MultiChannelNeuronType
+    if not isinstance(ens.neuron_type, MultiChannelNeuronType):
+        return
+
+    # Make sure the connection is actually connection to the "neurons" instance
+    # and not the ensembles directly
+    assert model.sig[conn]['out'] == model.sig[conn.post_obj.neurons]['in']
+
+    # Determine which channel to connect to
+    channel_idx = ens.neuron_type.inputs.index(conn.synapse_type)
+
+    # Fetch the corresponding signal
+    dst = model.sig[conn.post_obj.neurons]['in_{}'.format(channel_idx)]
+
+    # Search for the copy operator that connects the connection to the unused
+    # "in" signal and delete it. Create a new operator that connects the
+    # connection to the right neuron channel.
+    for i, op in enumerate(model.operators):
+        if isinstance(op, Copy):
+            if (op.dst is model.sig[conn.post_obj.neurons]['in']):
+                del model.operators[i]
+                model.add_op(Copy(
+                    op.src, dst, None, None, inc=True,
+                    tag="{}.{}".format(conn, conn.kind)))
+                break
+
