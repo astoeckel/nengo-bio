@@ -14,6 +14,8 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import numpy as np
+
 def lif_rate(J, tau_ref=2e-3, tau_rc=20e-3):
     """
     Calculates the firing rate of a LIF neuron with current based synapses.
