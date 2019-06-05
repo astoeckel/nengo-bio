@@ -22,6 +22,10 @@ with open("README.md", "r") as fh:
 setup(
     name='nengo_bio',
     packages=find_packages(),
+    package_data={
+        'nengo_bio.internal':
+        ['multi_compartment_lif.hpp']
+    },
     version='0.1.1',
     author='Andreas Stöckel',
     author_email='astoecke@uwaterloo.ca',
@@ -42,6 +46,7 @@ setup(
         "nengo>=2.8",
         "numpy>=1.16.3",
         "scipy>=1.2.0",
+        "posix_ipc>=1.0.4",
     ],
 )
 
