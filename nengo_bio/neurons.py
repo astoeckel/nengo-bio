@@ -106,28 +106,28 @@ class TwoCompLIFCond(MultiInputNeuronType):
                  g_leak_som=50e-9,
                  g_leak_den=50e-9,
                  g_couple=50e-9,
-                 tau_spike=1e-3,
-                 tau_ref=2e-3,
-                 v_spike=20e-3,
-                 v_reset=-65e-3,
-                 v_th=-50e-3,
                  E_rev_leak=-65e-3,
                  E_rev_exc=20e-3,
                  E_rev_inh=-75e-3,
+                 tau_ref=2e-3,
+                 tau_spike=1e-3,
+                 v_th=-50e-3,
+                 v_reset=-65e-3,
+                 v_spike=20e-3,
                  subsample=10):
         self.C_som = C_som
         self.C_den = C_den
         self.g_leak_som = g_leak_som
         self.g_leak_den = g_leak_den
         self.g_couple = g_couple
-        self.tau_spike = tau_spike
-        self.tau_ref = tau_ref
-        self.v_spike = v_spike
-        self.v_reset = v_reset
-        self.v_th = v_th
         self.E_rev_leak = E_rev_leak
         self.E_rev_exc = E_rev_exc
         self.E_rev_inh = E_rev_inh
+        self.tau_ref = tau_ref
+        self.tau_spike = tau_spike
+        self.v_th = v_th
+        self.v_reset = v_reset
+        self.v_spike = v_spike
         self.subsample = subsample
 
     def threshold_current(self):
@@ -165,8 +165,6 @@ class TwoCompLIFCond(MultiInputNeuronType):
                                   "of the sum of the refractory and spike "
                                   "period ({0.3f})".format(inv_tau_ref),
                                   attr='max_rates', obj=self)
-
-        
 
         return gain, bias
 
