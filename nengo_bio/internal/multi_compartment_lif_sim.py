@@ -69,7 +69,7 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
                         ("gain_min", c_double), ("gain_max", c_double),
                         ("tau", c_double), ("offs", c_double)]
 
-        def __init__(self, n_neurons):
+        def __init__(self, n_neurons=1):
             # Copy the number of neurons
             self.n_neurons = n_neurons
 

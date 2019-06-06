@@ -19,6 +19,8 @@ import numpy as np
 from nengo.exceptions import ValidationError
 from nengo.neurons import NeuronType
 from nengo.params import IntParam, NumberParam
+from nengo.dists import Uniform
+from nengo.cache import Fingerprint
 
 from nengo_bio.common import Excitatory, Inhibitory
 from nengo_bio.internal import (lif_utils, multi_compartment_lif_parameters)
@@ -115,7 +117,7 @@ class LIF(MultiChannelNeuronType):
         Returns the input current at which the neuron is supposed to start
         spiking.
         """
-        return (self.v_th - self.E_rev_leak) * self.g_leak_som
+        return (self.v_th - self.v_reset) * self.g_leak_som
 
     def _lif_parameters(self):
         """
@@ -192,11 +194,20 @@ class LIF(MultiChannelNeuronType):
             v_spike=self.v_spike,
         )
 
-    def _compile(self, dt, n_neurons, params_den, force_python_sim):
-        # Either instantiate the C++ simulator or the reference simulator
+    def _params_den(self):
+        return multi_compartment_lif_parameters.DendriticParameters.\
+            make_lif(
+            C_som=self.C_som,
+            g_leak_som=self.g_leak_som,
+            E_rev_leak=self.E_rev_leak)
+
+    def _compile(self, dt, force_python_sim=False):
         import nengo_bio.internal.multi_compartment_lif_cpp as mcl_cpp
         import nengo_bio.internal.multi_compartment_lif_python as mcl_python
+
+        # Either instantiate the C++ simulator or the reference simulator
         params_som = self._params_som()
+        params_den = self._params_den()
         if force_python_sim or not mcl_cpp.supports_cpp():
             sim_class = mcl_python.compile_simulator_python(
                 params_som, params_den, dt=dt, ss=self.subsample)
@@ -204,20 +215,87 @@ class LIF(MultiChannelNeuronType):
             sim_class = mcl_cpp.compile_simulator_cpp(
                 params_som, params_den, dt=dt, ss=self.subsample)
 
-        # Create a new simulator instance and wrap it in a function
+        # Return the simulator class
         return sim_class
 
+    def _estimate_input_range(self, max_rate):
+        """
+        This function returns the 2D area over the excitatory and inhibitory
+        input that should be sampled by the "tune" function.
+        """
+        in_exc = self._lif_rate_inv(max_rate)
+        in_inh = in_exc
+        return in_exc, in_inh
+
+    def _filter_input(self, in_exc, in_inh):
+        """
+        Function used to quickly discard samples that will definetively lead to
+        a zero output rate.
+        """
+        return in_inh * 0.8 < in_exc
+
     def tune(self, dt, model, ens):
-        return None
+        import hashlib
+        from nengo_bio.internal.multi_compartment_lif_sim import PoissonSource
+        from nengo_bio.internal.model_weights import tune_two_comp_model_weights
 
-    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False, get_class=False):
-        params_den = multi_compartment_lif_parameters.DendriticParameters.\
-            make_lif(
-            C_som=self.C_som,
-            g_leak_som=self.g_leak_som,
-            E_rev_leak=self.E_rev_leak)
+        # Fetch the maximum rates for which we need to determine the neuron
+        # parameters
+        max_rates = model.params[ens].max_rates
+        if isinstance(ens.max_rates, Uniform):
+            min_max_rate = ens.max_rates.low
+            max_max_rate = ens.max_rates.high
+        else:
+            min_max_rate = np.min(max_rates)
+            max_max_rate = np.max(max_rates)
 
-        sim_class = self._compile(dt, n_neurons, params_den, force_python_sim)
+        # Get the parameter hash
+        params_hash = str(Fingerprint([self, dt]))
+
+        # Function running a single neuron simulation
+        sim_class = self._compile(dt)
+        seed = 48199  # TODO
+        rate_exc = 1000  # TODO
+        rate_inh = 1000  # TODO
+        tau_exc = 5e-3  # TODO
+        tau_inh = 5e-3  # TODO
+
+        def run_single_sim(idx, out, in_exc, in_inh):
+            sim_class().run_poisson(out, [
+                PoissonSource(
+                    seed=seed + idx,
+                    rate=1,
+                    gain_min=0.0,
+                    gain_max=0.0,
+                    tau=tau_exc,
+                    offs=in_exc),
+                PoissonSource(
+                    seed=3 * seed + idx,
+                    rate=1,
+                    gain_min=0.0,
+                    gain_max=0.0,
+                    tau=tau_inh,
+                    offs=in_inh),
+            ])
+
+        return tune_two_comp_model_weights(
+            dt=dt,
+            max_rates=max_rates,
+            min_max_rate=min_max_rate,
+            max_max_rate=max_max_rate,
+            run_single_sim=run_single_sim,
+            estimate_input_range=self._estimate_input_range,
+            filter_input=self._filter_input,
+            lif_rate_inv=self._lif_rate_inv,
+            params_hash=params_hash)
+
+    def compile(self,
+                dt,
+                n_neurons,
+                tuning=None,
+                force_python_sim=False,
+                get_class=False):
+        sim_class = self._compile(dt, force_python_sim)
         if get_class:
             return sim_class
         return sim_class(n_neurons).run_step_from_memory
@@ -240,8 +318,6 @@ class TwoCompLIF(LIF):
 
     E_rev_exc = NumberParam('E_exc')
     E_rev_inh = NumberParam('E_inh')
-
-    subsample = IntParam('subsample', low=1)
 
     def __init__(self,
                  C_som=1e-9,
@@ -276,10 +352,55 @@ class TwoCompLIF(LIF):
         self.E_rev_exc = E_rev_exc
         self.E_rev_inh = E_rev_inh
 
-    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False, get_class=False):
-        # Create the parameter arrays describing this particular multi
-        # compartment LIF neuron
-        params_den = multi_compartment_lif_parameters.DendriticParameters.\
+    def _estimate_model_weights(self):
+        v_som = 0.5 * (self.v_th + self.v_reset)
+        ws = np.array((
+            self.g_couple * self.g_leak_den * (self.E_rev_leak - v_som),
+            self.g_couple * (self.E_rev_exc - v_som),
+            self.g_couple * (self.E_rev_inh - v_som),
+            self.g_couple + self.g_leak_den,
+            1.,
+            1.,
+        ),
+                      dtype=np.float64)
+        return ws / ws[1]
+
+    def _filter_input(self, in_exc, in_inh):
+        """
+        Function used to quickly discard samples that will definetively lead to
+        a zero output rate.
+        """
+        b0, b1, b2, _, _, _ = self._estimate_model_weights()
+        return (b0 + b2 * in_inh) * 0.8 > -b1 * in_exc
+
+
+    def _estimate_input_range(self, max_rate):
+        """
+        This function returns the 2D area over the excitatory and inhibitory
+        input that should be sampled by the "tune" function.
+        """
+
+        # Fetch the model parameters. Estimate the absolute maximum and minimum
+        # current.
+        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
+        Jmin, Jmax = b2 / a2, b1 / a1
+
+        # Convert the given ramp to a current. Clamp the rate to the maximum/
+        # minimum currents.
+        J = self._lif_rate_inv(max_rate)
+        J = np.clip(J, Jmin * 0.95, Jmax * 0.95)
+
+        # Compute the gE that will reach the computed J for gI = 0
+        gE = -(b0 - J * a0) / (b1 - J * a1)
+
+        # Compute the gI that will result in J = 0 for the above gE
+        gI = -(b0 + b1 * gE) / b2
+
+        # Return gE and gI with some safety margin
+        return gE * 1.2, gI * 1.2
+
+    def _params_den(self):
+        return multi_compartment_lif_parameters.DendriticParameters.\
             make_two_comp_lif(
             C_som=self.C_som,
             C_den=self.C_den,
@@ -291,8 +412,8 @@ class TwoCompLIF(LIF):
             E_rev_inh=self.E_rev_inh
         )
 
-        sim_class = self._compile(dt, n_neurons, params_den, force_python_sim)
-        if get_class:
-            return sim_class
-        return sim_class(n_neurons).run_step_from_memory
+
+# Whitelist the neuron types
+Fingerprint.whitelist(LIF)
+Fingerprint.whitelist(TwoCompLIF)
 

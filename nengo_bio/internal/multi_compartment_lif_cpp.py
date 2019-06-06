@@ -43,9 +43,6 @@ def _generate_simulator_cpp_code(f, params_som, params_den, dt=1e-3, ss=10):
     # Code below compares the result of _fmt to the string "0.0"
     assert _fmt(0) == "0.0" and _fmt(0.0) == "0.0"
 
-    def _fmt_bool(b):
-        return "true" if b else "false"
-
     def _generate_b_vec_entry(i, B, b_const):
         res = _fmt(b_const[i])
         if res == "0.0":

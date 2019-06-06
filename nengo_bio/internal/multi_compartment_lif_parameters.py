@@ -14,8 +14,8 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import json
 import numpy as np
-
 
 class SomaticParameters:
     """
@@ -47,11 +47,11 @@ class DendriticParameters:
 
     def __init__(self, A, a_const, B, b_const, C):
         # Copy the matrices/vectors
-        self.A = np.copy(A)
-        self.a_const = np.copy(a_const)
-        self.B = np.copy(B)
-        self.b_const = np.copy(b_const)
-        self.C = np.copy(C)
+        self.A = np.asarray(A, order='C', dtype=np.float64)
+        self.a_const = np.asarray(a_const, order='C', dtype=np.float64)
+        self.B = np.asarray(B, order='C', dtype=np.float64)
+        self.b_const = np.asarray(b_const, order='C', dtype=np.float64)
+        self.C = np.asarray(C, order='C', dtype=np.float64)
 
         # Make sure they have the right sizes
         self.a_const = self.a_const.flatten()

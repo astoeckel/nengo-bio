@@ -289,7 +289,11 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         connectivity = get_connectivity(conn, synapse_types, rng)
 
         # LIF neuron model parameters
-        WE, WI = solver(activities, target_currents, connectivity, rng)
+        tuning = None
+        if hasattr(built_post_ens, 'tuning'):
+            tuning = built_post_ens.tuning
+
+        WE, WI = solver(activities, target_currents, connectivity, tuning, rng)
 
         # If we're not targeting a MultiChannelNeuronType there really isn't
         # a distinction between excitatory and inhibitory input weights. Hence,

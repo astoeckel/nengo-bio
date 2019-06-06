@@ -23,18 +23,6 @@ import multiprocessing
 
 logger = logging.getLogger(__name__)
 
-USE_MOSEK = False
-try:
-    if USE_MOSEK is None:
-        import mosek
-        cvxopt.solvers.options["mosek"] = {
-            mosek.iparam.log: 0,
-            mosek.iparam.num_threads: 1
-        }
-        USE_MOSEK = True
-except:
-    USE_MOSEK = False
-
 DEFAULT_TOL = 1e-6
 DEFAULT_REG = 1e-1
 
@@ -65,6 +53,114 @@ class CvxoptParamGuard:
         for key, value in self.options.items():
             cvxopt.solvers.options[key] = value
         return self
+
+def _solve_qp(Pqp,
+              qqp,
+              Gqp=None,
+              hqp=None,
+              Aqp=None,
+              bqp=None,
+              tol=1e-12,
+              disp=True):
+    """
+    Solves the given quadtratic programing problem
+
+    min    x^T P x + q^T x
+    s.t.   Gx <= h
+           Ax  = b
+
+    """
+
+    # Solve the QP problem
+    with CvxoptParamGuard(tol=tol, disp=disp) as guard:
+        res = cvxopt.solvers.qp(
+            P=cvxopt.matrix(Pqp.astype(np.double)),
+            q=cvxopt.matrix(qqp.astype(np.double)),
+            G=None if Gqp is None else cvxopt.matrix(Gqp.astype(np.double)),
+            h=None if hqp is None else cvxopt.matrix(hqp.astype(np.double)),
+            A=None if Aqp is None else cvxopt.matrix(Aqp.astype(np.double)),
+            b=None if bqp is None else cvxopt.matrix(bqp.astype(np.double)))
+
+    return np.array(res["x"])
+
+
+def _check_basis_pursuit_params(C, d, A, b, G, h):
+    """
+    Used internally to make sure that the given arguments have the right
+    dimensionality.
+    """
+
+    # Replace zero-sized matrices with None
+    C = None if (not (C is None)) and C.size == 0 else C
+    d = None if (not (d is None)) and d.size == 0 else d
+    A = None if (not (A is None)) and A.size == 0 else A
+    b = None if (not (b is None)) and b.size == 0 else b
+    G = None if (not (G is None)) and G.size == 0 else G
+    h = None if (not (h is None)) and h.size == 0 else h
+
+    # Make sure either both of the variables in the pairs G, h and A, b are
+    # "None" or both of them are not
+    assert not (C is None) and not (d is None), "C, d must not be None"
+    assert (G is None) == (h is None), "Both G and h must be None"
+    assert (A is None) == (b is None), "Both A and b must be None"
+
+    # Make sure d, b, h are vectors
+    assert (d is None) or (d.size == d.shape[0]), "d must be a vector"
+    assert (b is None) or (b.size == b.shape[0]), "b must be a vector"
+    assert (h is None) or (h.size == h.shape[0]), "h must be a vector"
+
+    # Make sure A, C use the same number of variables
+    if not A is None:
+        assert A.shape[1] == C.shape[1], \
+                "Second dimension of A, C, and G (number of variables in " + \
+                "the system) must be the same"
+
+    # Make sure C, d and G, h have the same number of constraints
+    assert d.shape[0] == C.shape[0], \
+            "First dimension of C, d (number of equality constraints) " + \
+            "must be the same"
+    if not G is None:
+        assert G.shape[0] == h.shape[0], \
+                "First dimension of G, h (number of inequality " + \
+                " constraints) must be the same"
+
+        # Make sure G and C have the same number of variables
+        assert G.shape[1] == C.shape[1], \
+                "Second dimension of A, C, and G (number of variables in " + \
+                "the system) must be the same"
+
+    return C, d, A, b, G, h
+
+
+def solve_linearly_constrained_quadratic_loss(C,
+                                              d,
+                                              A=None,
+                                              b=None,
+                                              G=None,
+                                              h=None,
+                                              tol=DEFAULT_TOL,
+                                              disp=False):
+    """
+    Solves a problem similar to the basis pursuit problem, but using the L2
+    instead of the L1 norm, thus turning the problem into a quadratic program.
+
+    min    || Cx  - d ||_2
+    s.t.      Ax  = b
+              Gx <= h
+
+    This function is mainly meant for benchmarking the impact of using the L1
+    instead of the L2 norm.
+    """
+
+    # Make sure the dimensionalities of the input matrices are correct
+    C, d, A, b, G, h = _check_basis_pursuit_params(C, d, A, b, G, h)
+
+    # Compute the matrices for the QP problem
+    Pqp = C.T @ C
+    qqp = -C.T @ d
+
+    # Solve the QP problem
+    return _solve_qp(Pqp, qqp, G, h, A, b, tol=tol, disp=disp)
 
 
 def solve_weights_qp(A,
@@ -133,9 +229,6 @@ def solve_weights_qp(A,
     # Penalise slack variables
     Aext[a2:a3, v1:v2] = np.eye(n_slack) * m2
 
-    # Form the matrices P and q for the QP solver
-    P, q = Aext.T @ Aext, -Aext.T @ bext
-
     # Form the inequality constraints for the matrices G and h
     G = np.zeros((g2, n_vars_total))
     G[g0:g1, v0:v1] = A[~valid]
@@ -148,15 +241,9 @@ def solve_weights_qp(A,
     # Step 3: Solve the QP
     #
 
-    with CvxoptParamGuard(tol=tol) as guard:
-        opt = cvxopt.solvers.qp(
-            cvxopt.matrix(P),
-            cvxopt.matrix(q),
-            cvxopt.matrix(G),
-            cvxopt.matrix(h),
-            solver="mosek" if USE_MOSEK else None
-        )
-        return np.array(opt['x'])[:n_vars, 0]
+    x = solve_linearly_constrained_quadratic_loss(
+        Aext, bext, None, None, G, h, tol=tol)
+    return x[:n_vars, 0]
 
 class SolverTask(collections.namedtuple('SolverTask', [
         'Apre', 'Jpost', 'w', 'connectivity', 'iTh', 'nonneg', 'renormalise',
@@ -211,9 +298,9 @@ def _solve_single(t):
     if np.abs(b2) > 0 and np.abs(b1) > 0:
         if (a1 / b1) < np.max(t.Jpost):
             logger.warning(
-                "Desired target currents cannot be reached! Min. " +
-                "current: {:.3g}; Max. current: {:.3g}; Max. " +
-                "target current: {:3g}"
+                ("Desired target currents cannot be reached! Min. " +
+                 "current: {:.3g}; Max. current: {:.3g}; Max. " +
+                 "target current: {:.3g}")
             .format(a2 / b2, a1 / b1, np.max(t.Jpost)))
         t.Jpost[...] = t.Jpost.clip(0.975 * a2 / b2, 0.975 * a1 / b1)
 
