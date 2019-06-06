@@ -13,7 +13,8 @@ install:
   - pip install --upgrade coveralls coverage
   - pip install .
 script:
-  - OMP_NUM_THREADS=1 coverage run --source nengo_bio -m pytest nengo_bio/
+  - OMP_NUM_THREADS=1 coverage run --concurrency=multiprocessing --source nengo_bio -m pytest nengo_bio/
 after_success:
+  - coverage combine
   - coverage report
   - coveralls
