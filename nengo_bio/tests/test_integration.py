@@ -124,3 +124,23 @@ def test_parisien():
     assert run_and_compute_relative_rmse(
         model, probe, (lambda t: np.sin(t)**2,)) < 0.2
 
+def test_multi_channel_lif_communication_channel():
+    f1, f2 = lambda t: np.sin(t), lambda t: np.cos(t)
+    with nengo.Network(seed=5892) as model:
+        inp_a = nengo.Node(f1)
+        inp_b = nengo.Node(f2)
+
+        ens_a = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=0.8)
+        ens_b = bio.Ensemble(n_neurons=102, dimensions=1, p_exc=0.8)
+        ens_c = bio.Ensemble(n_neurons=103, dimensions=2,
+                         neuron_type=bio.neurons.LIF(),
+                         max_rates=nengo.dists.Uniform(100, 200))
+
+        nengo.Connection(inp_a, ens_a)
+        nengo.Connection(inp_b, ens_b)
+
+        bio.Connection((ens_a, ens_b), ens_c)
+
+        prb_output = nengo.Probe(ens_c, synapse=PROBE_SYNAPSE)
+
+    assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.1
