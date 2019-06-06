@@ -28,27 +28,6 @@ import nengo.builder.ensemble
 import nengo.builder.signal
 
 
-def delete_all_signals_and_ops_for_object(model, obj):
-    if not (obj in model.sig):
-        return
-
-    # Mark all signals related to this object as for deletion
-    signals_to_delete = set(model.sig[obj].items())
-
-    # Delete all operators that are connected to any of these signals
-    operators_to_delete = set()
-    for op in model.operators:
-        for sig in op.sets + op.incs + op.reads + op.updates:
-            if sig in signals_to_delete:
-                ops_to_delete.add(op)
-                break
-
-    # Actually delete the operators and signals
-    for op in ops_to_delete:
-        model.operators.remove(op)
-    for sig in signals_to_delete:
-        del model.signals[sig]
-
 built_attrs = nengo.builder.ensemble.built_attrs + ["synapse_types", "tuning"]
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
