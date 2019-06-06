@@ -45,8 +45,8 @@ def test_compile_simulator_cpp_subsample():
     for i in range(N):
         x_exc = np.asarray((gE,) * n_neurons, order='C', dtype=np.float64)
         x_inh = np.asarray((gI,) * n_neurons, order='C', dtype=np.float64)
-        sim_ss1.step_math(spikes_ss1[i:i+1], x_exc, x_inh)
-        sim_ss10.step_math(spikes_ss10[i:i+1], x_exc, x_inh)
+        sim_ss1.run_step_from_memory(spikes_ss1[i:i+1], x_exc, x_inh)
+        sim_ss10.run_step_from_memory(spikes_ss10[i:i+1], x_exc, x_inh)
 
     spike_times_ss1 = np.where(spikes_ss1 != 0)[0] * dt
     spike_times_ss10 = np.where(spikes_ss10 != 0)[0] * dt

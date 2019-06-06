@@ -121,15 +121,20 @@ struct Parameters {
 }
 
 extern "C" { // Exported C API
-void step_math(uint32_t n_neurons, double *state, double *out""")
+void run_step_from_memory(uint32_t n_neurons, double *state, double *out""")
     for i in range(pD.n_inputs):
         f.write(", double *x{}".format(i))
     f.write(""") {
     const double *xs[""" + str(pD.n_inputs) + """] = {""")
     f.write(", ".join("x{}".format(i) for i in range(pD.n_inputs)))
     f.write("""};
-    Simulator<Parameters>::step_math(n_neurons, state, out, xs);
+    Simulator<Parameters>::run_step_from_memory(n_neurons, state, out, xs);
 }
+
+void run_poisson(uint32_t n_samples, double *state, double *out, PoissonSource *sources) {
+    Simulator<Parameters>::run_with_poisson_sources(n_samples, state, out, sources);
+}
+
 };
 """)
 
@@ -254,7 +259,7 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
     can be used to  To compiled dynamic library will be stored in a temporary
     directory accessible only to the user running this Python process.
     """
-    from ctypes import cdll, POINTER, c_double, c_uint32
+    from ctypes import cdll, POINTER, cast, c_double, c_uint32, c_void_p
     import io
     import numpy as np
     import os
@@ -275,20 +280,27 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
             _compile_cpp_library(code, libpath)
 
         # Load the C library
-        c_double_p = POINTER(c_double)
         lib = cdll.LoadLibrary(libpath)
-        c_step_math = lib.step_math
-        c_step_math.argtypes = [c_uint32, c_double_p, c_double_p] + [c_double_p] * params_den.n_inputs
+        c_run_step_from_memory = lib.run_step_from_memory
+        c_run_poisson = lib.run_poisson
 
-        def step_math(self, out, *xs):
+        c_double_p = POINTER(c_double)
+
+        def run_step_from_memory(self, out, *xs):
             pstate = self.state.ctypes.data_as(c_double_p)
             pout = out.ctypes.data_as(c_double_p)
             pxs = [x.ctypes.data_as(c_double_p) for x in xs]
-            c_step_math(c_uint32(self.n_neurons), pstate, pout, *pxs)
+            c_run_step_from_memory(c_uint32(self.n_neurons), pstate, pout, *pxs)
+
+        def run_poisson(self, out, sources):
+            pstate = self.state.ctypes.data_as(c_double_p)
+            pout = out.ctypes.data_as(c_double_p)
+            psources = cast(sources, c_void_p)
+            c_run_poisson(out.size, pstate, pout, psources)
 
         # Register the above function for the specific neuron type and return it
         _compiled_library_map[key] = make_simulator_class(
-            step_math, params_som, params_den, dt, ss)
+            run_step_from_memory, run_poisson, params_som, params_den, dt, ss)
     return _compiled_library_map[key]
 
 

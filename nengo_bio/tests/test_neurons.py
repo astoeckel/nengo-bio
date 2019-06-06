@@ -17,6 +17,7 @@
 import nengo
 import numpy as np
 
+from nengo_bio.internal.multi_compartment_lif_sim import PoissonSource
 from nengo_bio.neurons import TwoCompLIF
 
 
@@ -56,7 +57,6 @@ class ReferenceTwoCompLIFSimulator:
 
 
 def do_test_neuron(nrn, T=1.0, dt=1e-3):
-    import time
     # Generate the input signals
     white_noise_process = nengo.processes.FilteredNoise(synapse=0.1, seed=3198)
     x_exc = white_noise_process.run(T, dt=dt)[:, 0] * 200e-9
@@ -66,8 +66,6 @@ def do_test_neuron(nrn, T=1.0, dt=1e-3):
     sim_ref = ReferenceTwoCompLIFSimulator(nrn, dt=dt, ss=nrn.subsample)
     sim_py = nrn.compile(dt, 1, None, force_python_sim=True)
     sim_cpp = nrn.compile(dt, 1, None)
-
-    times = [[], [], []]
 
     # Run the simulation
     t = 0
@@ -94,4 +92,38 @@ def test_two_comp_lif_simulators_asym_membrane():
 def test_two_comp_lif_simulators_asym_leak():
     nrn = TwoCompLIF(g_leak_den=20e-9, g_leak_som=100e-9)
     do_test_neuron(nrn)
+
+
+def do_test_poisson_sources(nrn, sources, T=10.0, dt=1e-3):
+    # Construct the C++ and Python simulator
+    sim_py = nrn.compile(dt, 1, None, force_python_sim=True, get_class=True)(1).run_poisson
+    sim_cpp = nrn.compile(dt, 1, None, get_class=True)(1).run_poisson
+
+    # Run the simulation
+    ts = np.arange(0, T, dt)
+    out_py, out_cpp = np.zeros((2, len(ts)))
+    sim_py(out_py, sources)
+    sim_cpp(out_cpp, sources)
+
+    return ts, out_py, out_cpp
+
+def test_two_comp_lif_poisson_simulators():
+    nrn = TwoCompLIF()
+    ts, out_py, out_cpp = do_test_poisson_sources(nrn, [
+        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=1e-6, tau=50e-3, offs=0.0),
+        PoissonSource(seed=3812, rate=50, gain_min=0.0, gain_max=0.5e-6, tau=50e-3, offs=0.0),
+    ])
+    times_py = ts[out_py > 0.0]
+    times_cpp = ts[out_cpp > 0.0]
+    rate_py = 1.0 / np.mean(times_py[1:] - times_py[:-1])
+    rate_cpp = 1.0 / np.mean(times_cpp[1:] - times_cpp[:-1])
+    assert np.abs(rate_py - rate_cpp) < 2.0
+
+def test_two_comp_lif_poisson_simulators_constant():
+    nrn = TwoCompLIF()
+    _, out_py, out_cpp = do_test_poisson_sources(nrn, [
+        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=0.0, tau=100e-3, offs=1e-6),
+        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=0.0, tau=100e-3, offs=0.5e-6),
+    ])
+    assert np.all(out_py == out_cpp)
 

@@ -205,16 +205,22 @@ class LIF(MultiChannelNeuronType):
                 params_som, params_den, dt=dt, ss=self.subsample)
 
         # Create a new simulator instance and wrap it in a function
-        return sim_class(n_neurons).step_math
+        return sim_class
 
-    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False):
+    def tune(self, dt, model, ens):
+        return None
+
+    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False, get_class=False):
         params_den = multi_compartment_lif_parameters.DendriticParameters.\
             make_lif(
             C_som=self.C_som,
             g_leak_som=self.g_leak_som,
             E_rev_leak=self.E_rev_leak)
 
-        return self._compile(dt, n_neurons, params_den, force_python_sim)
+        sim_class = self._compile(dt, n_neurons, params_den, force_python_sim)
+        if get_class:
+            return sim_class
+        return sim_class(n_neurons).run_step_from_memory
 
 
 class TwoCompLIF(LIF):
@@ -270,7 +276,7 @@ class TwoCompLIF(LIF):
         self.E_rev_exc = E_rev_exc
         self.E_rev_inh = E_rev_inh
 
-    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False):
+    def compile(self, dt, n_neurons, tuning=None, force_python_sim=False, get_class=False):
         # Create the parameter arrays describing this particular multi
         # compartment LIF neuron
         params_den = multi_compartment_lif_parameters.DendriticParameters.\
@@ -285,5 +291,8 @@ class TwoCompLIF(LIF):
             E_rev_inh=self.E_rev_inh
         )
 
-        return self._compile(dt, n_neurons, params_den, force_python_sim)
+        sim_class = self._compile(dt, n_neurons, params_den, force_python_sim)
+        if get_class:
+            return sim_class
+        return sim_class(n_neurons).run_step_from_memory
 
