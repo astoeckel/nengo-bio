@@ -124,6 +124,33 @@ def test_parisien():
     assert run_and_compute_relative_rmse(
         model, probe, (lambda t: np.sin(t)**2,)) < 0.2
 
+
+def test_parisien_relax():
+    with nengo.Network(seed=5892) as model:
+        inp_a = nengo.Node(lambda t: np.sin(t))
+
+        # Excitatory source population
+        ens_source = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=1.0)
+
+        # Inhibitory inter-neuron population
+        ens_inhint = bio.Ensemble(n_neurons=102, dimensions=1, p_inh=1.0)
+
+        # Target population
+        ens_target = bio.Ensemble(n_neurons=103, dimensions=1)
+
+        nengo.Connection(inp_a, ens_source)
+        bio.Connection(ens_source, ens_inhint,
+                       solver=bio.solvers.QPSolver(relax=True))
+        bio.Connection({ens_source, ens_inhint}, ens_target,
+                       function=lambda x: np.mean(x)**2,
+                       solver=bio.solvers.QPSolver(relax=True))
+
+        probe = nengo.Probe(ens_target, synapse=PROBE_SYNAPSE)
+
+    assert run_and_compute_relative_rmse(
+        model, probe, (lambda t: np.sin(t)**2,)) < 0.05
+
+
 def test_multi_channel_lif_communication_channel():
     f1, f2 = lambda t: np.sin(t), lambda t: np.cos(t)
     with nengo.Network(seed=5892) as model:
