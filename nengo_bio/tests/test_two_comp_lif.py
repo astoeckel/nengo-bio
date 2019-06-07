@@ -22,7 +22,7 @@ def test_two_comp_lif_lif_rate():
     lif = TwoCompLIF()
 
     # Sample the current space
-    i_th = lif.threshold_current()
+    i_th = lif.threshold_current
     js = np.linspace(-10 * i_th, 10 * i_th, 1000)
 
     # Compute the LIF rates. Make sure the threshold current computation was
@@ -49,7 +49,7 @@ def test_two_comp_lif_gain_bias():
 
     # Make sure the gain and bias are correct
     assert np.allclose(max_rates, lif._lif_rate(gain + bias))
-    assert np.allclose(lif.threshold_current(), gain * intercepts + bias)
+    assert np.allclose(lif.threshold_current, gain * intercepts + bias)
 
     # Make sure the inverse function to gain, bias works
     max_rates_reconstructed, intercepts_reconstructed = \
