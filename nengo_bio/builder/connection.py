@@ -293,7 +293,10 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if hasattr(built_post_ens, 'tuning'):
             tuning = built_post_ens.tuning
 
-        WE, WI = solver(activities, target_currents, connectivity, tuning, rng)
+        i_th = 1.0
+        if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
+            i_th = conn.post_obj.neuron_type.threshold_current
+        WE, WI = solver(activities, target_currents, connectivity, i_th, tuning, rng)
 
         # If we're not targeting a MultiChannelNeuronType there really isn't
         # a distinction between excitatory and inhibitory input weights. Hence,

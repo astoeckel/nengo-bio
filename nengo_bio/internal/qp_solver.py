@@ -81,7 +81,7 @@ def _solve_qp(Pqp,
             A=None if Aqp is None else cvxopt.matrix(Aqp.astype(np.double)),
             b=None if bqp is None else cvxopt.matrix(bqp.astype(np.double)))
 
-    return np.array(res["x"])
+        return np.array(res["x"])
 
 
 def _check_basis_pursuit_params(C, d, A, b, G, h):

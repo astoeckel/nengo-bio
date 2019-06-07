@@ -1,3 +1,4 @@
+
 #   nengo_bio -- Extensions to Nengo for more biological plausibility
 #   Copyright (C) 2019  Andreas Stöckel
 #
@@ -17,7 +18,6 @@
 import numpy as np
 
 SAMPLE_CACHE = {}
-
 
 def sample_rates(dt,
                  max_rates,
@@ -199,6 +199,28 @@ def tune_two_comp_model_weights(dt, max_rates, min_max_rate, max_max_rate,
         # Store per-neuron weights in the corresponding slot
         for i in entry["neurons"]:
             ws[i] = w
+
+#        def H(w, gE, gI):
+#            return (w[0] + w[1] * gE + w[2] * gI) / (w[3] + w[4] * gE + w[5] * gI)
+
+#        import matplotlib.pyplot as plt
+#        import matplotlib
+#        matplotlib.use('Agg')
+
+#        gE, gI = samples.T
+#        gEs = np.linspace(np.min(gE), np.max(gE))
+#        gIs = np.linspace(np.min(gI), np.max(gI))
+#        gEss, gIss = np.meshgrid(gEs, gIs)
+#        Js_model = H(w, gEss, gIss)
+
+#        fig, ax = plt.subplots()
+#        ax.scatter(gE, gI, c=Js)
+#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 100), colors=['white'])
+#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 100), colors=['r'], linestyles='--')
+#        ax.set_xlim(0, np.max(gE))
+#        ax.set_ylim(0, np.max(gI))
+
+#        fig.savefig('{}_{}.png'.format(params_hash, rate), dpi=300)
 
     return ws
 

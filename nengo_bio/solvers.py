@@ -46,8 +46,8 @@ class SolverWrapper(ExtendedSolver):
         self.neuron_indices = neuron_indices
         self.synapse_type = synapse_type
 
-    def __call__(self, A, J, connectivity, tuning, rng=np.random):
-        return self.solver(A, J, connectivity, tuning, rng)
+    def __call__(self, A, J, connectivity, i_th, tuning, rng=np.random):
+        return self.solver(A, J, connectivity, i_th, tuning, rng)
 
 
 class QPSolver(ExtendedSolver):
@@ -60,25 +60,24 @@ class QPSolver(ExtendedSolver):
         self.reg = reg
         self.relax = relax
 
-    def __call__(self, A, J, connectivity, tuning, rng=np.random):
+    def __call__(self, A, J, connectivity, i_th, tuning, rng=np.random):
         # Neuron model parameters. For now we only support current-based LIF
         if tuning is None:
             ws = np.array((0.0, 1.0, -1.0, 1.0, 0.0, 0.0))
         else:
             ws = tuning
-        print(ws)
 
         # Determine the final regularisatio nparameter
         reg = (self.reg * np.max(A))**2 * A.shape[1]
 
         # If subthreshold relaxation is switched off, set the spike threshold
         # to "None"
-        iTh = None if not self.relax else 1.0
+        i_th = None if not self.relax else i_th
 
         # Use the faster NNLS solver instead of CVXOPT if we do not need
         # current relaxation
-        use_lstsq = iTh is None
+        use_lstsq = i_th is None
 
         return qp_solver.solve(A, J, ws, connectivity,
-                               iTh=iTh, reg=reg, use_lstsq=use_lstsq)
+                               iTh=i_th, reg=reg, use_lstsq=use_lstsq)
 

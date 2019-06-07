@@ -112,11 +112,8 @@ class LIF(MultiChannelNeuronType):
         self.v_spike = v_spike
         self.subsample = subsample
 
+    @property
     def threshold_current(self):
-        """
-        Returns the input current at which the neuron is supposed to start
-        spiking.
-        """
         return (self.v_th - self.v_reset) * self.g_leak_som
 
     def _lif_parameters(self):
@@ -126,7 +123,7 @@ class LIF(MultiChannelNeuronType):
         """
         tau_ref = self.tau_spike + self.tau_ref
         tau_rc = self.C_som / self.g_leak_som
-        i_th = self.threshold_current()
+        i_th = self.threshold_current
         return tau_ref, tau_rc, i_th
 
     def _lif_rate(self, J):
@@ -175,7 +172,8 @@ class LIF(MultiChannelNeuronType):
 
         # Solve i_th = gain * intercept + bias for the intercept; warn about
         # invalid values
-        intercepts = (self.threshold_current() - bias) / gain
+        i_th = self.threshold_current
+        intercepts = (i_th - bias) / gain
         if not np.all(np.isfinite(intercepts)):
             warnings.warn("Non-finite values detected in `intercepts`; this "
                           "probably means that `gain` was too small.")
@@ -372,7 +370,6 @@ class TwoCompLIF(LIF):
         """
         b0, b1, b2, _, _, _ = self._estimate_model_weights()
         return (b0 + b2 * in_inh) * 0.8 > -b1 * in_exc
-
 
     def _estimate_input_range(self, max_rate):
         """
