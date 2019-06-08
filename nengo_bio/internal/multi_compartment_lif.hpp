@@ -59,6 +59,35 @@ struct PoissonSource {
 	double offs;
 };
 
+struct GaussianSource {
+	/**
+	 * Seed that should be used for the random number generator.
+	 */
+	uint32_t seed;
+
+	/**
+	 * Mean.
+	 */
+	double mu;
+
+	/**
+	 * Standard deviation.
+	 */
+	double sigma;
+
+	/**
+	 * Time constant of the exponential synapse the GaussianSource is connected
+	 * to.
+	 */
+	double tau;
+
+	/**
+	 * Constant offset that is applied to the input. When setting rate to zero,
+	 * the offset corresponds to the value of a constant input.
+	 */
+	double offs;
+};
+
 namespace {  // Do not export the following symbols
 template <typename Parameters>
 class Simulator {
@@ -258,6 +287,56 @@ public:
 
 			// Return the result
 			return xs + offs;
+		};
+
+		// Run the actual simulation
+		run_from_functor(f, 1, n_samples, state, out);
+	}
+
+	/**
+	 * Uses run_from_functor with a set of Gaussian noise sources as input.
+	 */
+	static void run_with_gaussian_source(uint32_t n_samples, double *state,
+	                                     double *out,
+	                                     const GaussianSource *sources)
+	{
+		// Initialize the individual random engines for the input channels,
+		// pre-compute some filter constants
+		std::array<std::mt19937, n_inputs> random_engines;
+		std::array<std::normal_distribution<double>, n_inputs> dist_norm;
+		VecX filt, xs, offs;
+		for (size_t j = 0; j < n_inputs; j++) {
+			// Initialize the random engine for this input with the seed
+			// specified by the user
+			random_engines[j].seed(sources[j].seed);
+
+			// Compute the filter coefficient
+			filt[j] = 1.0 - (dt * ss) / sources[j].tau;
+
+			// Setup the poisson distribution and draw the first spike time
+			const double scale = (dt * ss) / sources[j].tau;
+			dist_norm[j] = std::normal_distribution<double>(
+			    scale * sources[j].mu, scale * sources[j].stddev);
+
+			// Initialize xs to the average
+			xs[j] = sources[j].mu;
+
+			// Copy the offset
+			offs[j] = sources[j].offs;
+		}
+
+		// Implement the Poisson Source
+		auto f = [&](size_t, size_t) {
+			// Sample the noise source
+			for (size_t j = 0; j < n_inputs; j++) {
+				xs[j] += dist_norm[j]();
+			}
+
+			// Apply the exponential filter
+			xs = xs.array() * filt.array();
+
+			// Return the result
+			return std::max(0.0, xs + offs);
 		};
 
 		// Run the actual simulation
