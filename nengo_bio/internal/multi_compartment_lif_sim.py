@@ -15,23 +15,23 @@
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import collections
+import ctypes
 import numpy as np
 
-from ctypes import Structure, POINTER, c_double, c_uint32
+
+class PoissonSource(ctypes.Structure):
+    _fields_ = [("seed", ctypes.c_uint32), ("rate", ctypes.c_double),
+                ("gain_min", ctypes.c_double), ("gain_max", ctypes.c_double),
+                ("tau", ctypes.c_double), ("offs", ctypes.c_double)]
 
 
-class PoissonSource(Structure):
-    _fields_ = [("seed", c_uint32), ("rate", c_double), ("gain_min", c_double),
-                ("gain_max", c_double), ("tau", c_double), ("offs", c_double)]
+class GaussianSource(ctypes.Structure):
+    _fields_ = [("seed", ctypes.c_uint32), ("mu", ctypes.c_double),
+                ("sigma", ctypes.c_double), ("tau", ctypes.c_double),
+                ("offs", ctypes.c_double)]
 
 
-class GaussianSource(Structure):
-    _fields_ = [("seed", c_uint32), ("mu", c_double), ("sigma", c_double),
-                ("tau", c_double), ("offs", c_double)]
-
-
-def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
-                         params_den_, dt_, ss_):
+def make_simulator_class(impl, params_som_, params_den_, dt_, ss_):
     """
     The make_simulator_class creates a new Simulator class as used by both the
     Python and C++ simulator backend. It injects the given step_math function
@@ -40,8 +40,8 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
     Parameters
     ==========
 
-    step_math:
-        The actual step_math function provided by the simulator backend.
+    impl:
+        Object providing the actual implementation of the simulator functions.
     params_som_:
         The somatic parameters that should be stored in the Simulator class.
     params_den_:
@@ -55,8 +55,6 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
     def check(a, size):
         return (a.flags.c_contiguous and (a.dtype == np.float64)
                 and a.size >= size)
-
-    c_double_p = POINTER(c_double)
 
     class Simulator:
         params_som = params_som_
@@ -89,9 +87,22 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
                 check(x, self.n_neurons)
 
             # Call the actual step_math function
-            run_step_from_memory(self, out, *xs)
+            impl.run_step_from_memory(self, out, *xs)
 
-        def run_with_poisson_sources(self, out, sources):
+        def run_single_with_constant_input(self, out, xs):
+            # Make sure n_neurons is one -- this function only makes sense when
+            # simulating a single neuron
+            assert self.n_neurons == 1
+
+            # Make sure the output array is valid
+            assert check(out, 0)
+
+            # Make sure the input array is valid
+            assert check(xs, self.n_inputs)
+
+            impl.run_single_with_constant_input(self, out, xs)
+
+        def run_single_with_poisson_sources(self, out, sources):
             # Make sure n_neurons is one -- this function only makes sense when
             # simulating a single neuron
             assert self.n_neurons == 1
@@ -102,7 +113,7 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
             # Make sure the sources array is valid and copy the data over to a
             # C array
             assert (len(sources) == self.n_inputs)
-            c_sources = (Simulator.PoissonSource * self.n_inputs)()
+            c_sources = (PoissonSource * self.n_inputs)()
             for i in range(self.n_inputs):
                 c_sources[i].seed = sources[i].seed
                 c_sources[i].rate = sources[i].rate
@@ -111,9 +122,9 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
                 c_sources[i].tau = sources[i].tau
                 c_sources[i].offs = sources[i].offs
 
-            run_poisson(self, out, c_sources)
+            impl.run_single_with_poisson_sources(self, out, c_sources)
 
-        def run_with_gaussian_source(self, out, sources):
+        def run_single_with_gaussian_sources(self, out, sources):
             # Make sure n_neurons is one -- this function only makes sense when
             # simulating a single neuron
             assert self.n_neurons == 1
@@ -124,17 +135,15 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
             # Make sure the sources array is valid and copy the data over to a
             # C array
             assert (len(sources) == self.n_inputs)
-            c_sources = (Simulator.PoissonSource * self.n_inputs)()
+            c_sources = (GaussianSource * self.n_inputs)()
             for i in range(self.n_inputs):
                 c_sources[i].seed = sources[i].seed
-                c_sources[i].rate = sources[i].rate
-                c_sources[i].gain_min = sources[i].gain_min
-                c_sources[i].gain_max = sources[i].gain_max
+                c_sources[i].mu = sources[i].mu
+                c_sources[i].sigma = sources[i].sigma
                 c_sources[i].tau = sources[i].tau
                 c_sources[i].offs = sources[i].offs
 
-            run_poisson(self, out, c_sources)
-
+            impl.run_single_with_gaussian_sources(self, out, c_sources)
 
     return Simulator
 

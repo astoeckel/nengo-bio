@@ -27,9 +27,9 @@ def sample_rates(dt,
                  estimate_input_range,
                  filter_input,
                  params_hash,
-                 n_samples=500,
+                 n_samples=1000,
                  rate_discretization=20,
-                 T=50.0):
+                 T=10.0):
     def halton(i, b):
         f = 1
         r = 0
@@ -178,8 +178,6 @@ def fit_model_weights_two_comp(Js, samples, valid):
 def tune_two_comp_model_weights(dt, max_rates, min_max_rate, max_max_rate,
                                 run_single_sim, estimate_input_range,
                                 filter_input, lif_rate_inv, params_hash):
-    import matplotlib.pyplot as plt
-
     # Generate sample points and measure the
     rate_map = sample_rates(dt, max_rates, min_max_rate, max_max_rate,
                             run_single_sim, estimate_input_range, filter_input, params_hash)
@@ -215,8 +213,8 @@ def tune_two_comp_model_weights(dt, max_rates, min_max_rate, max_max_rate,
 
 #        fig, ax = plt.subplots()
 #        ax.scatter(gE, gI, c=Js)
-#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 100), colors=['white'])
-#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 100), colors=['r'], linestyles='--')
+#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['white'])
+#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['k'], linestyles='--')
 #        ax.set_xlim(0, np.max(gE))
 #        ax.set_ylim(0, np.max(gI))
 

@@ -18,94 +18,146 @@ import numpy as np
 
 from nengo_bio.internal.multi_compartment_lif_sim import make_simulator_class
 
+
 def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
     # Some handy aliases
     pS, pD = params_som, params_den
 
-    def run_step_from_memory(self, out, *xs):
-        # Iterate over all neurons
-        for i in range(self.n_neurons):
-            # Fetch the input data
-            x = np.array([xs[j][i] for j in range(self.n_inputs)])
+    class PythonImpl:
+        @staticmethod
+        def run_step_from_memory(self, out, *xs):
+            # Iterate over all neurons
+            for i in range(self.n_neurons):
+                # Fetch the input data
+                x = np.array([xs[j][i] for j in range(self.n_inputs)])
 
-            # Compute the A-matrix and the b-vector for this sample
-            A = pD.C + np.diag(pD.a_const + pD.A @ x)
-            b = pD.b_const + pD.B @ x
+                # Compute the A-matrix and the b-vector for this sample
+                A = pD.C + np.diag(pD.a_const + pD.A @ x)
+                b = pD.b_const + pD.B @ x
 
-            # Access to the current state: membrane poential and
-            # refractoriness
-            S = self.state[i]
+                # Access to the current state: membrane poential and
+                # refractoriness
+                S = self.state[i]
 
-            # Write the initial output value
-            out[i] = 0.
+                # Write the initial output value
+                out[i] = 0.
 
-            # Advance the simulation for the given number of subsamples
-            for s in range(ss):
-                # Compute the membrane potentials in dt / ss
-                S[:-1] += (A @ S[:-1] + b) * (dt / ss)
+                # Advance the simulation for the given number of subsamples
+                for s in range(ss):
+                    # Compute the membrane potentials in dt / ss
+                    S[:-1] += (A @ S[:-1] + b) * (dt / ss)
 
-                # Handle refractoriness
-                if S[-1] > 0.0:
-                    S[-1] -= dt / ss
-                    S[0] = pS.v_spike if S[-1] > pS.tau_ref else pS.v_reset
+                    # Handle refractoriness
+                    if S[-1] > 0.0:
+                        S[-1] -= dt / ss
+                        S[0] = pS.v_spike if S[-1] > pS.tau_ref else pS.v_reset
 
-                # Handle spikes
-                if S[0] > pS.v_th and S[-1] <= 0.0:
-                    S[-1] = pS.tau_ref + pS.tau_spike
-                    S[0] = pS.v_spike if pS.tau_spike > 0 else pS.v_reset
-                    out[i] = 1. / dt
+                    # Handle spikes
+                    if S[0] > pS.v_th and S[-1] <= 0.0:
+                        S[-1] = pS.tau_ref + pS.tau_spike
+                        S[0] = pS.v_spike if pS.tau_spike > 0 else pS.v_reset
+                        out[i] = 1. / dt
 
-    def run_poisson(self, out, sources):
-        n_samples = out.size
-        n_inputs = len(sources)
+        @staticmethod
+        def run_single_with_constant_input(self, out, xs):
+            for i in range(out.shape[0]):
+                PythonImpl.run_step_from_memory(self, out[i:i + 1], *xs)
 
-        # Initialize the individual random engines for the input channels,
-        # pre-compute some filter constants
-        rngs = [None] * n_inputs
-        dist_exp, dist_gain = [None] * n_inputs, [None] * n_inputs
-        filt, xs, offs, T = np.zeros((4, n_inputs, 1))
-        for j, src in enumerate(sources):
-            # Initialize the random engine for this input with the seed
-            # specified by the user
-            rngs[j] = np.random.RandomState(src.seed)
+        @staticmethod
+        def run_single_with_poisson_sources(self, out, sources):
+            n_samples = out.size
+            n_inputs = len(sources)
 
-            # Compute the filter coefficient
-            filt[j] = 1.0 - self.dt / src.tau
+            # Initialize the individual random engines for the input channels,
+            # pre-compute some filter constants
+            rngs = [None] * n_inputs
+            dist_exp, dist_gain = [None] * n_inputs, [None] * n_inputs
+            filt, xs, offs, T = np.zeros((4, n_inputs, 1))
+            for j, src in enumerate(sources):
+                # Initialize the random engine for this input with the seed
+                # specified by the user
+                rngs[j] = np.random.RandomState(src.seed)
 
-            # Setup the poisson and uniform distribution
-            def mk_dists(j, src):
-                scale = 1.0 / (src.tau * src.rate)
-                dist_exp = lambda: rngs[j].exponential(1. / src.rate)
-                dist_gain = lambda: rngs[j].uniform(src.gain_min * scale, src.gain_max * scale)
-                return dist_exp, dist_gain
-            dist_exp[j], dist_gain[j] = mk_dists(j, src)
+                # Compute the filter coefficient
+                filt[j] = 1.0 - self.dt / src.tau
 
-            # Draw the first spike time
-            T[j] = dist_exp[j]()
+                # Setup the poisson and uniform distribution
+                def mk_dists(j, src):
+                    scale = 1.0 / (src.tau * src.rate)
+                    dist_exp = lambda: rngs[j].exponential(1. / src.rate)
+                    dist_gain = lambda: rngs[j].uniform(src.gain_min * scale, src.gain_max * scale)
+                    return dist_exp, dist_gain
 
-            # Setup the uniform gain distribution and initialize xs to the
-            # average value
-            xs[j] = 0.5 * (src.gain_min + src.gain_max)
+                dist_exp[j], dist_gain[j] = mk_dists(j, src)
 
-            # Copy the offset
-            offs[j] = src.offs
+                # Draw the first spike time
+                T[j] = dist_exp[j]()
 
-        # Implement the Poisson Source and run the simulation
-        for i in range(n_samples):
-            curT = i * self.dt
-            for j in range(n_inputs):
-                while T[j] < curT:
-                    # Feed a Delta pulse into the input
-                    xs[j] += dist_gain[j]()
+                # Setup the uniform gain distribution and initialize xs to the
+                # average value
+                xs[j] = 0.5 * (src.gain_min + src.gain_max)
 
-                    # Compute the next spike time
-                    T[j] += dist_exp[j]()
+                # Copy the offset
+                offs[j] = src.offs
 
-            # Apply the exponential filter
-            xs *= filt
+            # Implement the Poisson source and run the simulation
+            for i in range(n_samples):
+                curT = i * self.dt
+                for j in range(n_inputs):
+                    while T[j] < curT:
+                        # Feed a Delta pulse into the input
+                        xs[j] += dist_gain[j]()
 
-            # Advance the simulation by one step
-            run_step_from_memory(self, out[i:i + 1], *(xs + offs))
+                        # Compute the next spike time
+                        T[j] += dist_exp[j]()
 
-    return make_simulator_class(run_step_from_memory, run_poisson, params_som,
-                                params_den, dt, ss)
+                # Apply the exponential filter
+                xs *= filt
+
+                # Advance the simulation by one step
+                PythonImpl.run_step_from_memory(self, out[i:i + 1],
+                                                *(xs + offs))
+
+        @staticmethod
+        def run_single_with_gaussian_sources(self, out, sources):
+            n_samples = out.size
+            n_inputs = len(sources)
+
+            # Initialize the individual random engines for the input channels,
+            # pre-compute some filter constants
+            rngs = [None] * n_inputs
+            dist_norm = [None] * n_inputs
+            filt, xs, offs = np.zeros((3, n_inputs, 1))
+            for j, src in enumerate(sources):
+                # Initialize the random engine for this input with the seed
+                # specified by the user
+                rngs[j] = np.random.RandomState(src.seed)
+
+                # Compute the filter coefficient
+                filt[j] = 1.0 - self.dt / src.tau
+
+                # Setup the Gaussian distribution
+                def mk_dists(j, src):
+                    scale = self.dt / src.tau
+                    dist_norm = lambda: rngs[j].normal(scale * src.mu, scale * src.sigma)
+                    return dist_norm
+
+                dist_norm[j] = mk_dists(j, src)
+
+                # Setup the uniform gain distribution and initialize xs to the
+                # average value
+                xs[j] = src.mu
+
+                # Copy the offset
+                offs[j] = src.offs
+
+            # Implement the Gaussian source and run the simulation
+            for i in range(n_samples):
+                for j in range(n_inputs):
+                    xs[j] += dist_norm[j]()
+                xs *= filt
+                inp = np.maximum(0.0, xs + offs)
+                PythonImpl.run_step_from_memory(self, out[i:i + 1], *inp)
+
+    return make_simulator_class(PythonImpl, params_som, params_den, dt, ss)
+

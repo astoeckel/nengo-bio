@@ -128,8 +128,16 @@ void run_step_from_memory(uint32_t n_neurons, double *state, double *out""")
     Simulator<Parameters>::run_step_from_memory(n_neurons, state, out, xs);
 }
 
-void run_poisson(uint32_t n_samples, double *state, double *out, PoissonSource *sources) {
-    Simulator<Parameters>::run_with_poisson_sources(n_samples, state, out, sources);
+void run_single_with_constant_input(uint32_t n_samples, double *state, double *out, double *xs) {
+    Simulator<Parameters>::run_single_with_constant_input(n_samples, state, out, xs);
+}
+
+void run_single_with_poisson_sources(uint32_t n_samples, double *state, double *out, PoissonSource *sources) {
+    Simulator<Parameters>::run_single_with_poisson_sources(n_samples, state, out, sources);
+}
+
+void run_single_with_gaussian_sources(uint32_t n_samples, double *state, double *out, GaussianSource *sources) {
+    Simulator<Parameters>::run_single_with_gaussian_sources(n_samples, state, out, sources);
 }
 
 };
@@ -279,25 +287,48 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
         # Load the C library
         lib = cdll.LoadLibrary(libpath)
         c_run_step_from_memory = lib.run_step_from_memory
-        c_run_poisson = lib.run_poisson
+        c_run_single_with_constant_input = lib.run_single_with_constant_input
+        c_run_single_with_poisson_sources = lib.run_single_with_poisson_sources
+        c_run_single_with_gaussian_source = lib.run_single_with_gaussian_sources
 
         c_double_p = POINTER(c_double)
 
-        def run_step_from_memory(self, out, *xs):
-            pstate = self.state.ctypes.data_as(c_double_p)
-            pout = out.ctypes.data_as(c_double_p)
-            pxs = [x.ctypes.data_as(c_double_p) for x in xs]
-            c_run_step_from_memory(c_uint32(self.n_neurons), pstate, pout, *pxs)
+        class CppImpl:
+            @staticmethod
+            def run_step_from_memory(self, out, *xs):
+                pstate = self.state.ctypes.data_as(c_double_p)
+                pout = out.ctypes.data_as(c_double_p)
+                pxs = [x.ctypes.data_as(c_double_p) for x in xs]
+                c_run_step_from_memory(
+                    c_uint32(self.n_neurons), pstate, pout, *pxs)
 
-        def run_poisson(self, out, sources):
-            pstate = self.state.ctypes.data_as(c_double_p)
-            pout = out.ctypes.data_as(c_double_p)
-            psources = cast(sources, c_void_p)
-            c_run_poisson(out.size, pstate, pout, psources)
+            @staticmethod
+            def run_single_with_constant_input(self, out, xs):
+                pstate = self.state.ctypes.data_as(c_double_p)
+                pout = out.ctypes.data_as(c_double_p)
+                pxs = xs.ctypes.data_as(c_double_p)
+                c_run_single_with_constant_input(
+                    c_uint32(out.shape[0]), pstate, pout, pxs)
+
+            @staticmethod
+            def run_single_with_poisson_sources(self, out, sources):
+                pstate = self.state.ctypes.data_as(c_double_p)
+                pout = out.ctypes.data_as(c_double_p)
+                psources = cast(sources, c_void_p)
+                c_run_single_with_poisson_sources(out.size, pstate, pout,
+                                                  psources)
+
+            @staticmethod
+            def run_single_with_gaussian_sources(self, out, sources):
+                pstate = self.state.ctypes.data_as(c_double_p)
+                pout = out.ctypes.data_as(c_double_p)
+                psources = cast(sources, c_void_p)
+                c_run_single_with_gaussian_source(out.size, pstate, pout,
+                                                  psources)
 
         # Register the above function for the specific neuron type and return it
         _compiled_library_map[key] = make_simulator_class(
-            run_step_from_memory, run_poisson, params_som, params_den, dt, ss)
+            CppImpl, params_som, params_den, dt, ss)
     return _compiled_library_map[key]
 
 

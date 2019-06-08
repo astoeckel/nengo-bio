@@ -17,7 +17,7 @@
 import nengo
 import numpy as np
 
-from nengo_bio.internal.multi_compartment_lif_sim import PoissonSource
+from nengo_bio.internal.multi_compartment_lif_sim import PoissonSource, GaussianSource
 from nengo_bio.neurons import TwoCompLIF
 
 
@@ -96,8 +96,11 @@ def test_two_comp_lif_simulators_asym_leak():
 
 def do_test_poisson_sources(nrn, sources, T=10.0, dt=1e-3):
     # Construct the C++ and Python simulator
-    sim_py = nrn.compile(dt, 1, None, force_python_sim=True, get_class=True)(1).run_poisson
-    sim_cpp = nrn.compile(dt, 1, None, get_class=True)(1).run_poisson
+    sim_py = nrn.compile(
+        dt, 1, None, force_python_sim=True,
+        get_class=True)(1).run_single_with_poisson_sources
+    sim_cpp = nrn.compile(
+        dt, 1, None, get_class=True)(1).run_single_with_poisson_sources
 
     # Run the simulation
     ts = np.arange(0, T, dt)
@@ -107,11 +110,24 @@ def do_test_poisson_sources(nrn, sources, T=10.0, dt=1e-3):
 
     return ts, out_py, out_cpp
 
+
 def test_two_comp_lif_poisson_simulators():
     nrn = TwoCompLIF()
     ts, out_py, out_cpp = do_test_poisson_sources(nrn, [
-        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=1e-6, tau=50e-3, offs=0.0),
-        PoissonSource(seed=3812, rate=50, gain_min=0.0, gain_max=0.5e-6, tau=50e-3, offs=0.0),
+        PoissonSource(
+            seed=3812,
+            rate=100,
+            gain_min=0.0,
+            gain_max=1e-6,
+            tau=50e-3,
+            offs=0.0),
+        PoissonSource(
+            seed=3812,
+            rate=50,
+            gain_min=0.0,
+            gain_max=0.5e-6,
+            tau=50e-3,
+            offs=0.0),
     ])
     times_py = ts[out_py > 0.0]
     times_cpp = ts[out_cpp > 0.0]
@@ -119,11 +135,99 @@ def test_two_comp_lif_poisson_simulators():
     rate_cpp = 1.0 / np.mean(times_cpp[1:] - times_cpp[:-1])
     assert np.abs(rate_py - rate_cpp) < 2.0
 
+
 def test_two_comp_lif_poisson_simulators_constant():
     nrn = TwoCompLIF()
     _, out_py, out_cpp = do_test_poisson_sources(nrn, [
-        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=0.0, tau=100e-3, offs=1e-6),
-        PoissonSource(seed=3812, rate=100, gain_min=0.0, gain_max=0.0, tau=100e-3, offs=0.5e-6),
+        PoissonSource(
+            seed=3812,
+            rate=100,
+            gain_min=0.0,
+            gain_max=0.0,
+            tau=100e-3,
+            offs=1e-6),
+        PoissonSource(
+            seed=3812,
+            rate=100,
+            gain_min=0.0,
+            gain_max=0.0,
+            tau=100e-3,
+            offs=0.5e-6),
     ])
     assert np.all(out_py == out_cpp)
 
+
+def do_test_constant(nrn, xs, T=10.0, dt=1e-3):
+    # Construct the C++ and Python simulator
+    sim_py = nrn.compile(
+        dt, 1, None, force_python_sim=True,
+        get_class=True)(1).run_single_with_constant_input
+    sim_cpp = nrn.compile(
+        dt, 1, None, get_class=True)(1).run_single_with_constant_input
+
+    # Run the simulation
+    ts = np.arange(0, T, dt)
+    out_py, out_cpp = np.zeros((2, len(ts)))
+    sim_py(out_py, xs)
+    sim_cpp(out_cpp, xs)
+
+    return ts, out_py, out_cpp
+
+
+def test_two_comp_lif_constant1():
+    nrn = TwoCompLIF()
+    xs = np.array((100e-9, 50e-9)).reshape(-1, 1)
+    _, out_py, out_cpp = do_test_constant(nrn, xs)
+    assert np.all(out_py == out_cpp)
+
+def test_two_comp_lif_constant2():
+    nrn = TwoCompLIF()
+    xs = np.array((120e-9, 100e-9)).reshape(-1, 1)
+    _, out_py, out_cpp = do_test_constant(nrn, xs)
+    assert np.all(out_py == out_cpp)
+
+
+def do_test_gaussian(nrn, sources, T=10.0, dt=1e-3):
+    # Construct the C++ and Python simulator
+    sim_py = nrn.compile(
+        dt, 1, None, force_python_sim=True,
+        get_class=True)(1).run_single_with_gaussian_sources
+    sim_cpp = nrn.compile(
+        dt, 1, None, get_class=True)(1).run_single_with_gaussian_sources
+
+    # Run the simulation
+    ts = np.arange(0, T, dt)
+    out_py, out_cpp = np.zeros((2, len(ts)))
+    sim_py(out_py, sources)
+    sim_cpp(out_cpp, sources)
+
+    import matplotlib.pyplot as plt
+    plt.plot(ts, out_py)
+    plt.plot(ts, out_cpp)
+    plt.show()
+
+    return ts, out_py, out_cpp
+
+
+def test_two_comp_lif_gaussian():
+    nrn = TwoCompLIF()
+    ts, out_py, out_cpp = do_test_gaussian(nrn, [
+        GaussianSource(
+            seed=3812,
+            mu=120e-9,
+            sigma=50e-9,
+            tau=5e-3,
+            offs=0.0),
+        GaussianSource(
+            seed=4891,
+            mu=110e-9,
+            sigma=50e-9,
+            tau=5e-3,
+            offs=0.0),
+    ])
+    times_py = ts[out_py > 0.0]
+    times_cpp = ts[out_cpp > 0.0]
+    rate_py = 1.0 / np.mean(times_py[1:] - times_py[:-1])
+    rate_cpp = 1.0 / np.mean(times_cpp[1:] - times_cpp[:-1])
+    print(rate_py, rate_cpp)
+    assert np.abs(rate_py - rate_cpp) < 2.0

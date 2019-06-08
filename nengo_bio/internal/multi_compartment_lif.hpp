@@ -229,14 +229,27 @@ public:
 	}
 
 	/**
+	 * Uses the run_from_functor function to implement a single-neuron
+	 * simulation with constant input.
+	 */
+	static void run_single_with_constant_input(uint32_t n_samples,
+	                                           double *state, double *out,
+	                                           const double *xs)
+	{
+		const VecX x(xs);
+		auto f = [x](size_t, size_t) -> VecX { return x; };
+		run_from_functor(f, 1, n_samples, state, out);
+	}
+
+	/**
 	 * Uses run_from_functor with a set of Poisson distributed spike sources as
 	 * inputs.
 	 *
 	 * @param sources is a list of PoissonSource descriptors.
 	 */
-	static void run_with_poisson_sources(uint32_t n_samples, double *state,
-	                                     double *out,
-	                                     const PoissonSource *sources)
+	static void run_single_with_poisson_sources(uint32_t n_samples,
+	                                            double *state, double *out,
+	                                            const PoissonSource *sources)
 	{
 		// Initialize the individual random engines for the input channels,
 		// pre-compute some filter constants
@@ -296,9 +309,9 @@ public:
 	/**
 	 * Uses run_from_functor with a set of Gaussian noise sources as input.
 	 */
-	static void run_with_gaussian_source(uint32_t n_samples, double *state,
-	                                     double *out,
-	                                     const GaussianSource *sources)
+	static void run_single_with_gaussian_sources(uint32_t n_samples,
+	                                             double *state, double *out,
+	                                             const GaussianSource *sources)
 	{
 		// Initialize the individual random engines for the input channels,
 		// pre-compute some filter constants
@@ -316,7 +329,7 @@ public:
 			// Setup the poisson distribution and draw the first spike time
 			const double scale = (dt * ss) / sources[j].tau;
 			dist_norm[j] = std::normal_distribution<double>(
-			    scale * sources[j].mu, scale * sources[j].stddev);
+			    scale * sources[j].mu, scale * sources[j].sigma);
 
 			// Initialize xs to the average
 			xs[j] = sources[j].mu;
@@ -329,14 +342,14 @@ public:
 		auto f = [&](size_t, size_t) {
 			// Sample the noise source
 			for (size_t j = 0; j < n_inputs; j++) {
-				xs[j] += dist_norm[j]();
+				xs[j] += dist_norm[j](random_engines[j]);
 			}
 
 			// Apply the exponential filter
 			xs = xs.array() * filt.array();
 
 			// Return the result
-			return std::max(0.0, xs + offs);
+			return (xs + offs).cwiseMax(0.0);
 		};
 
 		// Run the actual simulation
