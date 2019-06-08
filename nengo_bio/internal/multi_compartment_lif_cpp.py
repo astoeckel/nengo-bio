@@ -128,6 +128,10 @@ void run_step_from_memory(uint32_t n_neurons, double *state, double *out""")
     Simulator<Parameters>::run_step_from_memory(n_neurons, state, out, xs);
 }
 
+void run_with_constant_input(uint32_t n_samples, double *state, double *out, double *xs) {
+    Simulator<Parameters>::run_with_constant_input(n_samples, state, out, xs);
+}
+
 void run_poisson(uint32_t n_samples, double *state, double *out, PoissonSource *sources) {
     Simulator<Parameters>::run_with_poisson_sources(n_samples, state, out, sources);
 }
@@ -279,6 +283,7 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
         # Load the C library
         lib = cdll.LoadLibrary(libpath)
         c_run_step_from_memory = lib.run_step_from_memory
+        c_run_with_constant_input = lib.run_with_constant_input
         c_run_poisson = lib.run_poisson
 
         c_double_p = POINTER(c_double)
@@ -289,6 +294,12 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
             pxs = [x.ctypes.data_as(c_double_p) for x in xs]
             c_run_step_from_memory(c_uint32(self.n_neurons), pstate, pout, *pxs)
 
+        def run_with_constant_input(self, out, xs):
+            pstate = self.state.ctypes.data_as(c_double_p)
+            pout = out.ctypes.data_as(c_double_p)
+            pxs = xs.ctypes.data_as(c_double_p)
+            c_run_with_constant_input(c_uint32(out.shape[0]), pstate, pout, pxs)
+
         def run_poisson(self, out, sources):
             pstate = self.state.ctypes.data_as(c_double_p)
             pout = out.ctypes.data_as(c_double_p)
@@ -297,7 +308,7 @@ def compile_simulator_cpp(params_som, params_den, dt=1e-3, ss=10):
 
         # Register the above function for the specific neuron type and return it
         _compiled_library_map[key] = make_simulator_class(
-            run_step_from_memory, run_poisson, params_som, params_den, dt, ss)
+            run_step_from_memory, run_with_constant_input, run_poisson, params_som, params_den, dt, ss)
     return _compiled_library_map[key]
 
 

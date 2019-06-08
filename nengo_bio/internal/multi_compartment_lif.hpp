@@ -200,6 +200,18 @@ public:
 	}
 
 	/**
+	 * Uses the run_from_functor function to implement a single-neuron
+	 * simulation with constant input.
+	 */
+	static void run_with_constant_input(uint32_t n_samples, double *state,
+	                                    double *out, const double *xs)
+	{
+		const VecX x(xs);
+		auto f = [x](size_t, size_t) -> VecX { return x; };
+		run_from_functor(f, 1, n_samples, state, out);
+	}
+
+	/**
 	 * Uses run_from_functor with a set of Poisson distributed spike sources as
 	 * inputs.
 	 *

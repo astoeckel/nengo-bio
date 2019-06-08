@@ -252,29 +252,9 @@ class LIF(MultiChannelNeuronType):
 
         # Function running a single neuron simulation
         sim_class = self._compile(dt)
-        seed = 48199  # TODO
-        rate_exc = 1000  # TODO
-        rate_inh = 1000  # TODO
-        tau_exc = 5e-3  # TODO
-        tau_inh = 5e-3  # TODO
-
         def run_single_sim(idx, out, in_exc, in_inh):
-            sim_class().run_poisson(out, [
-                PoissonSource(
-                    seed=seed + idx,
-                    rate=1,
-                    gain_min=0.0,
-                    gain_max=0.0,
-                    tau=tau_exc,
-                    offs=in_exc),
-                PoissonSource(
-                    seed=3 * seed + idx,
-                    rate=1,
-                    gain_min=0.0,
-                    gain_max=0.0,
-                    tau=tau_inh,
-                    offs=in_inh),
-            ])
+            xs = np.asarray((in_exc, in_inh), order='C', dtype=np.float64)
+            sim_class().run_with_constant_input(out, xs)
 
         return tune_two_comp_model_weights(
             dt=dt,

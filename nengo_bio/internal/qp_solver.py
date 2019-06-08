@@ -14,14 +14,14 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import logging
 import collections
-import numpy as np
-import cvxopt
-import scipy.optimize
+import warnings
 import multiprocessing
+import sys
 
-logger = logging.getLogger(__name__)
+import cvxopt
+import numpy as np
+import scipy.optimize
 
 DEFAULT_TOL = 1e-6
 DEFAULT_REG = 1e-1
@@ -295,13 +295,13 @@ def _solve_single(t):
     a0, a1, a2, b0, b1, b2 = t.w
 
     # Clip Jtar to the valid range.
+    warning_msgs = []
     if np.abs(b2) > 0 and np.abs(b1) > 0:
         if (a1 / b1) < np.max(t.Jpost):
-            logger.warning(
-                ("Desired target currents cannot be reached! Min. " +
-                 "current: {:.3g}; Max. current: {:.3g}; Max. " +
-                 "target current: {:.3g}")
-            .format(a2 / b2, a1 / b1, np.max(t.Jpost)))
+            warning_msgs.append(
+                ("Target currents for neuron {} cannot be reached! {:.3g} ∉ [" +
+                 "{:.3g}, {:.3g}]")
+            .format(t.i, np.max(t.Jpost), a2 / b2, a1 / b1))
         t.Jpost[...] = t.Jpost.clip(0.975 * a2 / b2, 0.975 * a1 / b1)
 
     # Split the pre activities into neurons marked as excitatory,
@@ -337,7 +337,7 @@ def _solve_single(t):
         else:
             fws = np.linalg.lstsq(Γ, Υ, rcond=None)[0]
 
-    return t.i, fws[:Npre_exc] * Wscale, fws[Npre_exc:] * Wscale
+    return t.i, fws[:Npre_exc] * Wscale, fws[Npre_exc:] * Wscale, warning_msgs
 
 
 def solve(Apre,
@@ -390,7 +390,9 @@ def solve(Apre,
         valid[:, i], i, m) for i in range(Npost)]
     WE, WI = np.zeros((2, Npre, Npost))
     with multiprocessing.Pool(multiprocessing.cpu_count() // 2) as pool:
-        for i, we, wi in pool.imap_unordered(_solve_single, tasks):
+        for i, we, wi, warning_msgs in pool.imap_unordered(_solve_single, tasks):
+            for msg in warning_msgs:
+                print('Warning: {}'.format(msg))
             exc, inh = connectivity[:, :, i]
             WE[exc, i], WI[inh, i] = we, wi
 

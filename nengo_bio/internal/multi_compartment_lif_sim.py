@@ -25,8 +25,8 @@ class PoissonSource(
     pass
 
 
-def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
-                         params_den_, dt_, ss_):
+def make_simulator_class(run_step_from_memory, run_with_constant_input,
+                         run_poisson, params_som_, params_den_, dt_, ss_):
     """
     The make_simulator_class creates a new Simulator class as used by both the
     Python and C++ simulator backend. It injects the given step_math function
@@ -92,6 +92,19 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
             # Call the actual step_math function
             run_step_from_memory(self, out, *xs)
 
+        def run_with_constant_input(self, out, xs):
+            # Make sure n_neurons is one -- this function only makes sense when
+            # simulating a single neuron
+            assert self.n_neurons == 1
+
+            # Make sure the output array is valid
+            assert check(out, 0)
+
+            # Make sure the input array is valid
+            assert check(xs, self.n_inputs)
+
+            run_with_constant_input(self, out, xs)
+
         def run_poisson(self, out, sources):
             # Make sure n_neurons is one -- this function only makes sense when
             # simulating a single neuron
@@ -115,3 +128,4 @@ def make_simulator_class(run_step_from_memory, run_poisson, params_som_,
             run_poisson(self, out, c_sources)
 
     return Simulator
+

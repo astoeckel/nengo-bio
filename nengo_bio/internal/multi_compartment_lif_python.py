@@ -18,6 +18,7 @@ import numpy as np
 
 from nengo_bio.internal.multi_compartment_lif_sim import make_simulator_class
 
+
 def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
     # Some handy aliases
     pS, pD = params_som, params_den
@@ -55,6 +56,10 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
                     S[0] = pS.v_spike if pS.tau_spike > 0 else pS.v_reset
                     out[i] = 1. / dt
 
+    def run_with_constant_input(self, out, xs):
+        for i in range(out.shape[0]):
+            self.run_step_from_memory(out[i:i + 1], *xs[i])
+
     def run_poisson(self, out, sources):
         n_samples = out.size
         n_inputs = len(sources)
@@ -78,6 +83,7 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
                 dist_exp = lambda: rngs[j].exponential(1. / src.rate)
                 dist_gain = lambda: rngs[j].uniform(src.gain_min * scale, src.gain_max * scale)
                 return dist_exp, dist_gain
+
             dist_exp[j], dist_gain[j] = mk_dists(j, src)
 
             # Draw the first spike time
@@ -107,5 +113,6 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
             # Advance the simulation by one step
             run_step_from_memory(self, out[i:i + 1], *(xs + offs))
 
-    return make_simulator_class(run_step_from_memory, run_poisson, params_som,
-                                params_den, dt, ss)
+    return make_simulator_class(run_step_from_memory, run_with_constant_input,
+                                run_poisson, params_som, params_den, dt, ss)
+
