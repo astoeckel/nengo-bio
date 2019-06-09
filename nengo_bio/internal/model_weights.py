@@ -212,11 +212,14 @@ def tune_two_comp_model_weights(dt, max_rates, min_max_rate, max_max_rate,
 #        Js_model = H(w, gEss, gIss)
 
 #        fig, ax = plt.subplots()
-#        ax.scatter(gE, gI, c=Js)
-#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['white'])
-#        ax.contour(gEs, gIs, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['k'], linestyles='--')
-#        ax.set_xlim(0, np.max(gE))
-#        ax.set_ylim(0, np.max(gI))
+#        sc = ax.scatter(gE * 1e9, gI * 1e9, c=rates)
+#        ax.contour(gEs * 1e9, gIs * 1e9, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['white'])
+#        ax.contour(gEs * 1e9, gIs * 1e9, Js_model, levels=np.linspace(0, np.max(Js), 10), colors=['k'], linestyles='--')
+#        ax.set_xlim(0, np.max(gE) * 1e9)
+#        ax.set_ylim(0, np.max(gI) * 1e9)
+#        ax.set_xlabel("Excitatory input")
+#        ax.set_ylabel("Inhibitory input")
+#        plt.colorbar(sc)
 
 #        fig.savefig('{}_{}.png'.format(params_hash, rate), dpi=300)
 

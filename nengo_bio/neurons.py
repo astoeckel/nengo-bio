@@ -230,11 +230,10 @@ class LIF(MultiChannelNeuronType):
         Function used to quickly discard samples that will definetively lead to
         a zero output rate.
         """
-        return in_inh * 0.8 < in_exc
+        return (in_exc - in_inh) * 1.2 > self.threshold_current
 
     def tune(self, dt, model, ens):
-        import hashlib
-        from nengo_bio.internal.multi_compartment_lif_sim import PoissonSource
+        from nengo_bio.internal.multi_compartment_lif_sim import GaussianSource
         from nengo_bio.internal.model_weights import tune_two_comp_model_weights
 
         # Fetch the maximum rates for which we need to determine the neuron
@@ -252,9 +251,25 @@ class LIF(MultiChannelNeuronType):
 
         # Function running a single neuron simulation
         sim_class = self._compile(dt)
+
         def run_single_sim(idx, out, in_exc, in_inh):
             xs = np.asarray((in_exc, in_inh), order='C', dtype=np.float64)
-            sim_class().run_with_constant_input(out, xs)
+            # TODO: Get these parameters from the connection
+            sim_class().run_single_with_gaussian_sources(
+                out, [
+                    GaussianSource(
+                        seed=4902 + idx,
+                        mu=in_exc,
+                        sigma=in_exc * 0.0,
+                        tau=5e-3,
+                        offs=0.0),
+                    GaussianSource(
+                        seed=5821 + 7 * idx,
+                        mu=in_inh,
+                        sigma=in_inh * 0.0,
+                        tau=5e-3,
+                        offs=0.0),
+                ])
 
         return tune_two_comp_model_weights(
             dt=dt,
@@ -339,17 +354,20 @@ class TwoCompLIF(LIF):
             self.g_couple + self.g_leak_den,
             1.,
             1.,
-        ),
-                      dtype=np.float64)
-        return ws / ws[1]
+        ))
+
+        # Normalise ws[1] = 1
+        ws = ws / ws[1]
+
+        return ws
 
     def _filter_input(self, in_exc, in_inh):
         """
         Function used to quickly discard samples that will definetively lead to
         a zero output rate.
         """
-        b0, b1, b2, _, _, _ = self._estimate_model_weights()
-        return (b0 + b2 * in_inh) * 0.8 > -b1 * in_exc
+        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
+        return (b0 + b1 * in_exc + b2 * in_inh) / (a0 + a1 * in_exc + a2 * in_inh) * 1.2 > self.threshold_current
 
     def _estimate_input_range(self, max_rate):
         """
@@ -370,11 +388,11 @@ class TwoCompLIF(LIF):
         # Compute the gE that will reach the computed J for gI = 0
         gE = -(b0 - J * a0) / (b1 - J * a1)
 
-        # Compute the gI that will result in J = 0 for the above gE
-        gI = -(b0 + b1 * gE) / b2
+        # Compute the gI that will result in J = i_th for the above gE
+        gI = (self.threshold_current - (b0 + b1 * gE)) / b2
 
-        # Return gE and gI with some safety margin
-        return gE * 1.2, gI * 1.2
+        # Return gE and gI
+        return gE, gI
 
     def _params_den(self):
         return multi_compartment_lif_parameters.DendriticParameters.\
