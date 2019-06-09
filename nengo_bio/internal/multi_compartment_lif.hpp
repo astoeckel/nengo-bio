@@ -283,6 +283,9 @@ public:
 
 		// Implement the Poisson Source
 		auto f = [&](size_t i, size_t) {
+			// Apply the exponential filter
+			xs = xs.array() * filt.array();
+
 			// Generate new input events
 			const double curT = i * ss * dt;
 			for (size_t j = 0; j < n_inputs; j++) {
@@ -294,9 +297,6 @@ public:
 					T[j] += dist_exp[j](random_engines[j]);
 				}
 			}
-
-			// Apply the exponential filter
-			xs = xs.array() * filt.array();
 
 			// Return the result
 			return xs + offs;
@@ -340,13 +340,13 @@ public:
 
 		// Implement the Poisson Source
 		auto f = [&](size_t, size_t) {
+			// Apply the exponential filter
+			xs = xs.array() * filt.array();
+
 			// Sample the noise source
 			for (size_t j = 0; j < n_inputs; j++) {
 				xs[j] += dist_norm[j](random_engines[j]);
 			}
-
-			// Apply the exponential filter
-			xs = xs.array() * filt.array();
 
 			// Return the result
 			return (xs + offs).cwiseMax(0.0);

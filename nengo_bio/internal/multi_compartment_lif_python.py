@@ -102,6 +102,10 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
 
             # Implement the Poisson source and run the simulation
             for i in range(n_samples):
+                # Apply the exponential filter
+                xs *= filt
+
+                # Simulate the Poisson spike source
                 curT = i * self.dt
                 for j in range(n_inputs):
                     while T[j] < curT:
@@ -110,9 +114,6 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
 
                         # Compute the next spike time
                         T[j] += dist_exp[j]()
-
-                # Apply the exponential filter
-                xs *= filt
 
                 # Advance the simulation by one step
                 PythonImpl.run_step_from_memory(self, out[i:i + 1],
@@ -154,8 +155,7 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
             # Implement the Gaussian source and run the simulation
             for i in range(n_samples):
                 for j in range(n_inputs):
-                    xs[j] += dist_norm[j]()
-                xs *= filt
+                    xs[j] = xs[j] * filt[j] + dist_norm[j]()
                 inp = np.maximum(0.0, xs + offs)
                 PythonImpl.run_step_from_memory(self, out[i:i + 1], *inp)
 
