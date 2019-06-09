@@ -200,12 +200,6 @@ def do_test_gaussian(nrn, sources, T=10.0, dt=1e-3):
     out_py, out_cpp = np.zeros((2, len(ts)))
     sim_py(out_py, sources)
     sim_cpp(out_cpp, sources)
-
-    import matplotlib.pyplot as plt
-    plt.plot(ts, out_py)
-    plt.plot(ts, out_cpp)
-    plt.show()
-
     return ts, out_py, out_cpp
 
 
@@ -229,5 +223,4 @@ def test_two_comp_lif_gaussian():
     times_cpp = ts[out_cpp > 0.0]
     rate_py = 1.0 / np.mean(times_py[1:] - times_py[:-1])
     rate_cpp = 1.0 / np.mean(times_cpp[1:] - times_cpp[:-1])
-    print(rate_py, rate_cpp)
     assert np.abs(rate_py - rate_cpp) < 2.0

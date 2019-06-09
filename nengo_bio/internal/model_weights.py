@@ -134,7 +134,6 @@ def sample_rates(dt,
     return rate_map
 
 def fit_model_weights_two_comp(Js, samples, valid):
-    import sympy as sp
     from .qp_solver import solve_linearly_constrained_quadratic_loss
 
     # Assemble the quadratic loss function
