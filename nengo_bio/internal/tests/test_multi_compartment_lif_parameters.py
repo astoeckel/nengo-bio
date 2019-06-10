@@ -39,3 +39,27 @@ def test_dendritic_parameters_two_comp_lif():
     assert np.allclose(params.b_const, [-3.25, -3.25])
     assert np.allclose(params.C, [[0., 50.], [50., 0.]])
 
+def test_dendritic_parameters_two_comp_lif_veq_extreme():
+    params = DendriticParameters.make_two_comp_lif(
+        C_som=1e-9,
+        C_den=1e-9,
+        g_leak_som=50e-9,
+        g_leak_den=50e-9,
+        g_couple=50e-9,
+        E_rev_leak=-65e-3,
+        E_rev_exc=20e-3,
+        E_rev_inh=-75e-3)
+    v_min, v_max = params.vEq_extreme()
+    assert v_min.size == v_max.size == 2
+    assert np.allclose(v_min, -65e-3)
+    assert np.allclose(v_max,   5e-3)
+
+def test_dendritic_parameters_lif_veq_extreme():
+    params = DendriticParameters.make_lif(
+        C_som=1e-9,
+        g_leak_som=50e-9,
+        E_rev_leak=-65e-3)
+    v_min, v_max = params.vEq_extreme()
+    assert v_min.size == v_max.size == 1
+    assert np.allclose(v_min, -np.inf)
+    assert np.allclose(v_max,  np.inf)

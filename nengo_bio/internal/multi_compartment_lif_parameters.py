@@ -17,6 +17,7 @@
 import json
 import numpy as np
 
+
 class SomaticParameters:
     """
     The SomaticParameters class describes the parameters of the active LIF
@@ -72,6 +73,77 @@ class DendriticParameters:
         """Returns the number of inputs feeding into the neuron model."""
         return self.A.shape[1]
 
+    def _reduce_system(self, A, b, i, v):
+        """
+        Reduces given the system by clamping a certain compartment i to the
+        given potential v. Returns three matrices corresponding to the reduced
+        system A_red, b_red and the vector required to compute the current
+        flowing into the clamped compartment.
+        """
+
+        # Abort if this is a one-compartment neuron
+        n = A.shape[0]
+        if n <= 1:
+            return 0, 0, 0
+
+        # Fetch the A sub-matrix, add the current caused by the clamped somatic
+        # compartment
+        sel = list(range(0, i)) + list(range(i + 1, n))
+        A_red = A[np.ix_(sel, sel)]
+        b_red = b[sel] + v * A[sel, i]
+        return A_red, b_red
+
+    def vEq_extreme(self, params_som=None):
+        """Returns the absolute minimum and maximum potentials reachable in each
+           compartment by setting a conductance input to infinity. Note that
+           current inputs will"""
+
+        # Initialize v_min and v_max to the resting potential
+        A, b = self.C + np.diag(self.a_const), self.b_const
+        v_eq = -np.linalg.solve(A, b)
+        v_min, v_max = v_eq, v_eq
+
+        # Iterate over all compartments and all inputs and see what happens when
+        # we set one of the inputs to infinity.
+        for i in range(self.n_comp):
+            for j in range(self.n_inputs):
+                for sign in [1, -1]:
+                    # Skip inputs that are not directly connected to the given
+                    # compartment
+                    if self.A[i, j] == 0.0 and self.B[i, j] == 0.0:
+                        continue
+
+                    # Compute the reversal potential for each compartment this input
+                    # is connected to. Set current based inputs to a reversal
+                    # potential of infinity
+                    if self.A[i, j] == 0:
+                        E_rev = sign * np.inf
+                    else:
+                        E_rev = self.B[i, j] / self.A[i, j]
+
+                    # Assume the compartment had the potential we just computed. Do
+                    # this by reducing system to a smaller one without this
+                    # compartment.
+                    if self.n_comp > 1:
+                        A_red, b_red = self._reduce_system(A, b, i, E_rev)
+                        v_eq = -np.linalg.solve(A_red, b_red)
+                    else:
+                        v_eq = E_rev
+
+                    # Update the minimum/maximum potential
+                    v_min = np.minimum(v_min, v_eq)
+                    v_max = np.maximum(v_max, v_eq)
+
+        # If present, use some knowledge from params_som to restrict the
+        # minimum/maximum voltages further
+        if not params_som is None:
+            if np.isinf(v_min[0]):
+                v_min[0] = params_som.v_reset
+            if np.isinf(v_max[0]):
+                v_max[0] = params_som.v_spike
+
+        return v_min, v_max
+
     @staticmethod
     def make_lif(C_som, g_leak_som, E_rev_leak, input_mul=1.):
         """
@@ -83,6 +155,29 @@ class DendriticParameters:
         a_const = np.array((-g_leak_som, )) / C_som
 
         B = np.array(((input_mul, -input_mul), )) / C_som
+        b_const = np.array((E_rev_leak * g_leak_som, )) / C_som
+
+        C = np.array(((0., ), )) / C_som
+
+        return DendriticParameters(A, a_const, B, b_const, C)
+
+    @staticmethod
+    def make_lif_cond(C_som=1e-9,
+                      g_leak_som=50e-9,
+                      E_rev_leak=-65e-3,
+                      E_rev_exc=20e-3,
+                      E_rev_inh=-75e-3,
+                      input_mul=1.):
+        """
+        This function creates a DendriticParameters instance describing the
+        parameters of a single-compartment, conductance-based LIF neuron.
+        """
+
+        A = np.array(((-input_mul, -input_mul), )) / C_som
+        a_const = np.array((-g_leak_som, )) / C_som
+
+        B = np.array(
+            ((input_mul * E_rev_exc, input_mul * E_rev_inh), )) / C_som
         b_const = np.array((E_rev_leak * g_leak_som, )) / C_som
 
         C = np.array(((0., ), )) / C_som

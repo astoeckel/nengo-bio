@@ -23,6 +23,9 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
     # Some handy aliases
     pS, pD = params_som, params_den
 
+    # Compute v_min, v_max
+    v_min, v_max = params_den.vEq_extreme(params_som)
+
     class PythonImpl:
         @staticmethod
         def run_step_from_memory(self, out, *xs):
@@ -46,6 +49,9 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
                 for s in range(ss):
                     # Compute the membrane potentials in dt / ss
                     S[:-1] += (A @ S[:-1] + b) * (dt / ss)
+
+                    # Clamp the potentials
+                    S[:-1] = np.clip(S[:-1], v_min, v_max)
 
                     # Handle refractoriness
                     if S[-1] > 0.0:

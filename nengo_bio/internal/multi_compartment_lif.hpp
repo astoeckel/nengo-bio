@@ -180,6 +180,11 @@ private:
 				for (size_t s = 0; s < ss; s++) {
 					v += (A * v + b) * dt;
 
+					// Clamp the potentials to reasonable values
+					v = v.array()
+					        .min(Parameters::v_max.array())
+					        .max(Parameters::v_min.array());
+
 					// Handle the refractory/spike period for the somatic
 					// compartment
 					if (tref > 0.0) {

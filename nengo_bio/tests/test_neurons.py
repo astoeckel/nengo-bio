@@ -27,6 +27,9 @@ class ReferenceTwoCompLIFSimulator:
         self.dt, self.ss = dt, ss
         self.v_som, self.v_den, self.tref = nrn.v_reset, nrn.v_reset, 0.
 
+        pS, pD = nrn._params_som(), nrn._params_den()
+        self.v_min, self.v_max = pD.vEq_extreme(pS)
+
     def __call__(self, out, gE, gI):
         nrn = self.nrn
         v_som, v_den, tref = self.v_som, self.v_den, self.tref
@@ -43,6 +46,9 @@ class ReferenceTwoCompLIFSimulator:
 
             v_som += (self.dt / self.ss) * d_v_som / nrn.C_som
             v_den += (self.dt / self.ss) * d_v_den / nrn.C_den
+
+            v_som = np.clip(v_som, self.v_min[0], self.v_max[0])
+            v_den = np.clip(v_den, self.v_min[1], self.v_max[1])
 
             if tref > 0.:
                 tref -= self.dt / self.ss
