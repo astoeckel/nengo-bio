@@ -14,16 +14,14 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Set the package name
-name = "nengo_bio"
+import nengo
 
-# Expose commonly used objects
-from .connection import Connection
-from .ensemble import Ensemble
-from .common import Excitatory, Inhibitory
-from .config import set_defaults
-
-# Explicitly load the builder submodule to register the builder components
-from . import (
-	builder
-)
+def set_defaults():
+    """
+    Sets the default parameters for ensembles to more biologically realisitc
+    defaults. In particular, makes sure that the maximum firing rate is between
+    50 and 100 Hz and restricts the intercepts to values between -0.9 and 0.9.
+    This prevents target currents from being too large.
+    """
+    nengo.Ensemble.max_rates.default = nengo.dists.Uniform(50, 100)
+    nengo.Ensemble.intercepts.default = nengo.dists.Uniform(-0.9, 0.9)
