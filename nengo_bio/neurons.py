@@ -459,7 +459,7 @@ class TwoCompLIF(LIFCond):
 
 
 # Alias for TwoCompLIF emphasizing the use of conductance based synapses
-TwoComLIFCond = TwoCompLIF
+TwoCompLIFCond = TwoCompLIF
 
 # Whitelist the neuron types
 Fingerprint.whitelist(LIF)
