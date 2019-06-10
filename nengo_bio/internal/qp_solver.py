@@ -17,11 +17,13 @@
 import collections
 import warnings
 import multiprocessing
-import sys
+import os
 
 import cvxopt
 import numpy as np
 import scipy.optimize
+
+from .env_guard import EnvGuard
 
 DEFAULT_TOL = 1e-6
 DEFAULT_REG = 1e-1
@@ -389,12 +391,14 @@ def solve(Apre,
         nonneg, renormalise, tol, reg, use_lstsq,
         valid[:, i], i, m) for i in range(Npost)]
     WE, WI = np.zeros((2, Npre, Npost))
-    with multiprocessing.Pool(multiprocessing.cpu_count() // 2) as pool:
-        for i, we, wi, warning_msgs in pool.imap_unordered(_solve_single, tasks):
-            for msg in warning_msgs:
-                print('Warning: {}'.format(msg))
-            exc, inh = connectivity[:, :, i]
-            WE[exc, i], WI[inh, i] = we, wi
+    with EnvGuard({"OMP_NUM_THREADS": "1"}) as env:
+        ctx = multiprocessing.get_context("spawn")
+        with ctx.Pool() as pool:
+            for i, we, wi, warning_msgs in pool.imap_unordered(_solve_single, tasks):
+                for msg in warning_msgs:
+                    print('Warning: {}'.format(msg))
+                exc, inh = connectivity[:, :, i]
+                WE[exc, i], WI[inh, i] = we, wi
 
     return WE, WI
 
