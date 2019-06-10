@@ -216,21 +216,43 @@ class LIF(MultiChannelNeuronType):
         # Return the simulator class
         return sim_class
 
-    def _estimate_input_range(self, max_rate):
-        """
-        This function returns the 2D area over the excitatory and inhibitory
-        input that should be sampled by the "tune" function.
-        """
-        in_exc = self._lif_rate_inv(max_rate)
-        in_inh = in_exc
-        return in_exc, in_inh
+    def _estimate_model_weights(self):
+        return np.array((0., 1., -1., 1., 0, 0))
 
     def _filter_input(self, in_exc, in_inh):
         """
         Function used to quickly discard samples that will definetively lead to
         a zero output rate.
         """
-        return (in_exc - in_inh) * 1.2 > self.threshold_current
+        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
+        return (b0 + b1 * in_exc + b2 * in_inh) / (
+            a0 + a1 * in_exc + a2 * in_inh) * 1.2 > self.threshold_current
+
+    def _estimate_input_range(self, max_rate):
+        """
+        This function returns the 2D area over the excitatory and inhibitory
+        input that should be sampled by the "tune" function.
+        """
+
+        # Fetch the model parameters. Estimate the absolute maximum and minimum
+        # current.
+        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
+        Jmin = b2 / a2 if a2 != 0.0 else -np.inf
+        Jmax = b1 / a1 if a1 != 0.0 else  np.inf
+
+        # Convert the given ramp to a current. Clamp the rate to the maximum/
+        # minimum currents.
+        J = self._lif_rate_inv(max_rate)
+        J = np.clip(J, Jmin * 0.95, Jmax * 0.95)
+
+        # Compute the gE that will reach the computed J for gI = 0
+        gE = -(b0 - J * a0) / (b1 - J * a1)
+
+        # Compute the gI that will result in J = i_th for the above gE
+        gI = (self.threshold_current - (b0 + b1 * gE)) / b2
+
+        # Return gE and gI
+        return gE, gI
 
     def tune(self, dt, model, ens):
         from nengo_bio.internal.multi_compartment_lif_sim import GaussianSource
@@ -260,13 +282,13 @@ class LIF(MultiChannelNeuronType):
                     GaussianSource(
                         seed=4902 + idx,
                         mu=in_exc,
-                        sigma=in_exc * 0.0,
+                        sigma=in_exc * 0.2,
                         tau=5e-3,
                         offs=0.0),
                     GaussianSource(
                         seed=5821 + 7 * idx,
                         mu=in_inh,
-                        sigma=in_inh * 0.0,
+                        sigma=in_inh * 0.2,
                         tau=5e-3,
                         offs=0.0),
                 ])
@@ -294,7 +316,71 @@ class LIF(MultiChannelNeuronType):
         return sim_class(n_neurons).run_step_from_memory
 
 
-class TwoCompLIF(LIF):
+class LIFCond(LIF):
+    """
+    Single compartment LIF neuron with conductance-based synapses.
+    """
+
+    inputs = (Excitatory, Inhibitory)
+
+    E_rev_exc = NumberParam('E_exc')
+    E_rev_inh = NumberParam('E_inh')
+
+    def __init__(self,
+                 C_som=1e-9,
+                 g_leak_som=50e-9,
+                 E_rev_leak=-65e-3,
+                 E_rev_exc=20e-3,
+                 E_rev_inh=-75e-3,
+                 tau_ref=2e-3,
+                 tau_spike=1e-3,
+                 v_th=-50e-3,
+                 v_reset=-65e-3,
+                 v_spike=20e-3,
+                 subsample=10):
+
+        super(LIFCond, self).__init__(
+            C_som=C_som,
+            g_leak_som=g_leak_som,
+            E_rev_leak=E_rev_leak,
+            tau_ref=tau_ref,
+            tau_spike=tau_spike,
+            v_th=v_th,
+            v_reset=v_reset,
+            v_spike=v_spike,
+            subsample=subsample)
+
+        self.E_rev_exc = E_rev_exc
+        self.E_rev_inh = E_rev_inh
+
+    def _estimate_model_weights(self):
+        v_som = 0.5 * (self.v_th + self.v_reset)
+        ws = np.array((
+            0.,
+            (self.E_rev_exc - v_som),
+            (self.E_rev_inh - v_som),
+            1.,
+            0.,
+            0.,
+        ))
+
+        # Normalise ws[1] = 1
+        ws = ws / ws[1]
+
+        return ws
+
+    def _params_den(self):
+        return multi_compartment_lif_parameters.DendriticParameters.\
+            make_lif_cond(
+            C_som=self.C_som,
+            g_leak_som=self.g_leak_som,
+            E_rev_leak=self.E_rev_leak,
+            E_rev_exc=self.E_rev_exc,
+            E_rev_inh=self.E_rev_inh
+        )
+
+
+class TwoCompLIF(LIFCond):
     """
     A two-compartment LIF neuron with conductance based synapses.
 
@@ -308,9 +394,6 @@ class TwoCompLIF(LIF):
 
     g_leak_den = NumberParam('g_leak_den', low=0, low_open=True)
     g_couple = NumberParam('g_couple', low=0, low_open=True)
-
-    E_rev_exc = NumberParam('E_exc')
-    E_rev_inh = NumberParam('E_inh')
 
     def __init__(self,
                  C_som=1e-9,
@@ -332,6 +415,8 @@ class TwoCompLIF(LIF):
             C_som=C_som,
             g_leak_som=g_leak_som,
             E_rev_leak=E_rev_leak,
+            E_rev_exc=E_rev_exc,
+            E_rev_inh=E_rev_inh,
             tau_ref=tau_ref,
             tau_spike=tau_spike,
             v_th=v_th,
@@ -342,8 +427,6 @@ class TwoCompLIF(LIF):
         self.C_den = C_den
         self.g_leak_den = g_leak_den
         self.g_couple = g_couple
-        self.E_rev_exc = E_rev_exc
-        self.E_rev_inh = E_rev_inh
 
     def _estimate_model_weights(self):
         v_som = 0.5 * (self.v_th + self.v_reset)
@@ -361,39 +444,6 @@ class TwoCompLIF(LIF):
 
         return ws
 
-    def _filter_input(self, in_exc, in_inh):
-        """
-        Function used to quickly discard samples that will definetively lead to
-        a zero output rate.
-        """
-        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
-        return (b0 + b1 * in_exc + b2 * in_inh) / (a0 + a1 * in_exc + a2 * in_inh) * 1.2 > self.threshold_current
-
-    def _estimate_input_range(self, max_rate):
-        """
-        This function returns the 2D area over the excitatory and inhibitory
-        input that should be sampled by the "tune" function.
-        """
-
-        # Fetch the model parameters. Estimate the absolute maximum and minimum
-        # current.
-        b0, b1, b2, a0, a1, a2 = self._estimate_model_weights()
-        Jmin, Jmax = b2 / a2, b1 / a1
-
-        # Convert the given ramp to a current. Clamp the rate to the maximum/
-        # minimum currents.
-        J = self._lif_rate_inv(max_rate)
-        J = np.clip(J, Jmin * 0.95, Jmax * 0.95)
-
-        # Compute the gE that will reach the computed J for gI = 0
-        gE = -(b0 - J * a0) / (b1 - J * a1)
-
-        # Compute the gI that will result in J = i_th for the above gE
-        gI = (self.threshold_current - (b0 + b1 * gE)) / b2
-
-        # Return gE and gI
-        return gE, gI
-
     def _params_den(self):
         return multi_compartment_lif_parameters.DendriticParameters.\
             make_two_comp_lif(
@@ -408,7 +458,11 @@ class TwoCompLIF(LIF):
         )
 
 
+# Alias for TwoCompLIF emphasizing the use of conductance based synapses
+TwoComLIFCond = TwoCompLIF
+
 # Whitelist the neuron types
 Fingerprint.whitelist(LIF)
+Fingerprint.whitelist(LIFCond)
 Fingerprint.whitelist(TwoCompLIF)
 
