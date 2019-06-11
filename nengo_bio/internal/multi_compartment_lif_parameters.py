@@ -127,6 +127,7 @@ class DendriticParameters:
                     if self.n_comp > 1:
                         A_red, b_red = self._reduce_system(A, b, i, E_rev)
                         v_eq = -np.linalg.solve(A_red, b_red)
+                        v_eq = np.concatenate((v_eq[:i], (E_rev,), v_eq[i:]))
                     else:
                         v_eq = E_rev
 

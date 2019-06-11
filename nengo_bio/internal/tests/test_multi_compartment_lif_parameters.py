@@ -51,8 +51,10 @@ def test_dendritic_parameters_two_comp_lif_veq_extreme():
         E_rev_inh=-75e-3)
     v_min, v_max = params.vEq_extreme()
     assert v_min.size == v_max.size == 2
-    assert np.allclose(v_min, -70e-3)
-    assert np.allclose(v_max, -22.5e-3)
+    assert np.allclose(v_min[0], -70e-3)
+    assert np.allclose(v_max[0], -22.5e-3)
+    assert np.allclose(v_min[1], -75e-3)
+    assert np.allclose(v_max[1], 20e-3)
 
 def test_dendritic_parameters_lif_veq_extreme():
     params = DendriticParameters.make_lif(
