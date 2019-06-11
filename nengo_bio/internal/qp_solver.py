@@ -34,7 +34,7 @@ class CvxoptParamGuard:
     processing has finished or an exception occurs.
     """
 
-    def __init__(self, tol=1e-24, disp=False):
+    def __init__(self, tol=DEFAULT_TOL, disp=False):
         self.options = {
             "abstol": tol,
             "feastol": tol,
@@ -62,7 +62,7 @@ def _solve_qp(Pqp,
               hqp=None,
               Aqp=None,
               bqp=None,
-              tol=1e-12,
+              tol=DEFAULT_TOL,
               disp=True):
     """
     Solves the given quadtratic programing problem
