@@ -119,7 +119,7 @@ class DendriticParameters:
                     if self.A[i, j] == 0:
                         E_rev = sign * np.inf
                     else:
-                        E_rev = self.B[i, j] / self.A[i, j]
+                        E_rev = -self.B[i, j] / self.A[i, j]
 
                     # Assume the compartment had the potential we just computed. Do
                     # this by reducing system to a smaller one without this
