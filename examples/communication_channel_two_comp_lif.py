@@ -20,8 +20,7 @@ with nengo.Network(seed=4589) as model:
     nengo.Connection(inp_a, ens_a)
     nengo.Connection(inp_b, ens_b)
 
-    bio.Connection((ens_a, ens_b), ens_c,
-                   solver=bio.solvers.QPSolver(relax=True))
+    bio.Connection((ens_a, ens_b), ens_c)
 
 with nengo.Simulator(model, progress_bar=None, dt=1e-4) as sim:
     sim.run(1.0)
