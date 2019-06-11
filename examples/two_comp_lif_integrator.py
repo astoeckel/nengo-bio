@@ -6,7 +6,7 @@ import nengo_bio as bio
 with nengo.Network() as model:
     inp_a = nengo.Node(lambda t: 1.0 if (t > 0.1 and t < 1.1) else 0.0)
     ens_a = bio.Ensemble(n_neurons=100, dimensions=1, p_exc=0.8)
-    ens_b = bio.Ensemble(n_neurons=500, dimensions=1, p_exc=0.8,
+    ens_b = bio.Ensemble(n_neurons=100, dimensions=1, p_exc=0.8,
                          neuron_type=bio.neurons.TwoCompLIF(),
                          max_rates=nengo.dists.Uniform(75, 100))
 
