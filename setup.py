@@ -26,7 +26,7 @@ setup(
         'nengo_bio.internal':
         ['multi_compartment_lif.hpp']
     },
-    version='0.1.1',
+    version='0.2.0',
     author='Andreas Stöckel',
     author_email='astoecke@uwaterloo.ca',
     description='Dendritic Computation Primitives for Nengo',
