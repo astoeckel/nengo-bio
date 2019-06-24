@@ -1,4 +1,9 @@
-![NengoBio Logo](doc/logo.png) [![PyPI version](https://badge.fury.io/py/nengo-bio.svg)](https://badge.fury.io/py/nengo-bio) [![Build Status](https://travis-ci.org/astoeckel/nengo-bio.svg?branch=master)](https://travis-ci.org/astoeckel/nengo-bio) [![Coverage Status](https://coveralls.io/repos/github/astoeckel/nengo-bio/badge.svg?branch=master)](https://coveralls.io/github/astoeckel/nengo-bio?branch=master)
+<div style="text-align:center">
+![NengoBio Logo](doc/logo.png) [![PyPI version](https://badge.fury.io/py/nengo-bio.svg)](https://badge.fury.io/py/nengo-bio)
+<br/>
+[![Build Status](https://travis-ci.org/astoeckel/nengo-bio.svg?branch=master)](https://travis-ci.org/astoeckel/nengo-bio) 
+[![Coverage Status](https://coveralls.io/repos/github/astoeckel/nengo-bio/badge.svg?branch=master)](https://coveralls.io/github/astoeckel/nengo-bio?branch=master)
+</div>
 
 # NengoBio ‒ Biologically (more) plausible Nengo models
 
