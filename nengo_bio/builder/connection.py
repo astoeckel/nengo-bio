@@ -28,19 +28,20 @@ from nengo.ensemble import Ensemble, Neurons
 import nengo.builder
 from nengo.builder.operator import Copy, Reset
 
+
 class BuiltConnection:
     def __init__(self):
-        self.weights = {
-            Excitatory: None,
-            Inhibitory: None
-        }
+        self.weights = {Excitatory: None, Inhibitory: None}
 
-def get_multi_ensemble_eval_points(
-    model, mens, n_eval_points=None, scale_eval_points=True, rng=np.random):
+
+def get_multi_ensemble_eval_points(model,
+                                   mens,
+                                   n_eval_points=None,
+                                   scale_eval_points=True,
+                                   rng=np.random):
     """
     This function generates the evaluation points for the given MultiEnsemble.
     """
-
     def choice(A, n):
         return A[rng.randint(0, A.shape[0], n)]
 
@@ -67,8 +68,9 @@ def get_multi_ensemble_eval_points(
         # of evaluation points.
         pnts_per_obj, n_pnts = [None] * len(mens.objs), [0] * len(mens.objs)
         for i, obj in enumerate(mens.objs):
-            pnts = get_multi_ensemble_eval_points(
-                model, mens.objs[i], n_eval_points, scale_eval_points, rng)
+            pnts = get_multi_ensemble_eval_points(model, mens.objs[i],
+                                                  n_eval_points,
+                                                  scale_eval_points, rng)
             pnts_per_obj[i] = pnts
             n_pnts[i] = pnts.shape[0]
         max_n_pnts = max(n_pnts)
@@ -87,13 +89,13 @@ def get_multi_ensemble_eval_points(
                 if n_eval_points >= max_n_pnts:
                     # Write the points to the resulting array, fill the
                     # remaining space with randomly selected samples
-                    pnts[:n_pnts, d:(d+n_dims)] = p
+                    pnts[:n_pnts, d:(d + n_dims)] = p
                     pnts[n_pnts:, d:(d+n_dims)] = \
                         choice(p, n_eval_points - n_pnts)
                 else:
                     # Ranomly select n_eval_points points and write them to
                     # the target array
-                    pnts[:, d:(d+n_dims)] = choice(p, n_eval_points)
+                    pnts[:, d:(d + n_dims)] = choice(p, n_eval_points)
 
                 # Increment the dimension counter
                 d += n_dims
@@ -109,16 +111,18 @@ def get_multi_ensemble_eval_points(
 def get_eval_points(model, conn, rng=np.random):
     # In case no eval_points object has been specified
     if conn.eval_points is None:
-        return get_multi_ensemble_eval_points(
-            model, conn.pre_obj, conn.n_eval_points, conn.scale_eval_points,
-            rng)
+        return get_multi_ensemble_eval_points(model, conn.pre_obj,
+                                              conn.n_eval_points,
+                                              conn.scale_eval_points, rng)
     else:
         if conn.scale_eval_points:
-            warnings.warn(NengoWarning(
-                "Setting scale_eval_points to True has no effect on {} if "
-                "eval_points are specified manually.".format(conn.pre_obj)))
-        return nengo.builder.ensemble.gen_eval_points(
-            conn, conn.eval_points, rng, False)
+            warnings.warn(
+                NengoWarning(
+                    "Setting scale_eval_points to True has no effect on {} if "
+                    "eval_points are specified manually.".format(
+                        conn.pre_obj)))
+        return nengo.builder.ensemble.gen_eval_points(conn, conn.eval_points,
+                                                      rng, False)
 
 
 def get_multi_ensemble_activities(model, mens, eval_points):
@@ -164,9 +168,9 @@ def get_connectivity(conn, synapse_types, rng=np.random):
 
     # If no restrictions were given, just allow all-to-all connections
     if not (has_mps or has_mps_E or has_mps_I):
-        return np.array((
-            np.tile(synapse_types[0, :, None], Npost),
-            np.tile(synapse_types[1, :, None], Npost)),
+        return np.array(
+            (np.tile(synapse_types[0, :, None],
+                     Npost), np.tile(synapse_types[1, :, None], Npost)),
             dtype=np.bool)
     if has_mps and has_mps_E and has_mps_I:
         raise BuildError(
@@ -239,8 +243,8 @@ def remove_bias_current(model, ens):
 @nengo.builder.Builder.register(SolverWrapper)
 def build_solver(model, solver, _, rng, *args, **kwargs):
     # Fetch the high-level connection
-    conn = solver.connection # Note: this is the nengo_bio.Connection object
-                             # and NOT the nengo.Connection object
+    conn = solver.connection  # Note: this is the nengo_bio.Connection object
+    # and NOT the nengo.Connection object
 
     # If the high-level connection object has not been built, build it
     if not conn in model.params:
@@ -257,18 +261,16 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
 
         # Fetch the evaluation points, activites, and synapse types for the
         # entire MultiEnsemble
-        eval_points = get_eval_points(
-            model, conn, rng)
-        activities = get_multi_ensemble_activities(
-            model, conn.pre_obj, eval_points)
-        synapse_types = get_multi_ensemble_synapse_types(
-            model, conn.pre_obj)
+        eval_points = get_eval_points(model, conn, rng)
+        activities = get_multi_ensemble_activities(model, conn.pre_obj,
+                                                   eval_points)
+        synapse_types = get_multi_ensemble_synapse_types(model, conn.pre_obj)
 
         # Fetch the target values in representation space
         targets = nengo.builder.connection.get_targets(conn, eval_points)
 
         # Transform the target values
-        if hasattr(nengo.connection, 'Dense'): # Nengo 2.8 compat
+        if hasattr(nengo.connection, 'Dense'):  # Nengo 2.8 compat
             transform = conn.transform.sample(rng=rng)
         else:
             transform = conn.transform
@@ -350,8 +352,12 @@ def build_connection(model, conn):
         if isinstance(op, Copy):
             if (op.dst is model.sig[conn.post_obj.neurons]['in']):
                 del model.operators[i]
-                model.add_op(Copy(
-                    op.src, dst, None, None, inc=True,
-                    tag="{}.{}".format(conn, conn.kind)))
+                model.add_op(
+                    Copy(op.src,
+                         dst,
+                         None,
+                         None,
+                         inc=True,
+                         tag="{}.{}".format(conn, conn.kind)))
                 break
 
