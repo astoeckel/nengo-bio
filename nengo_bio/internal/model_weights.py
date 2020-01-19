@@ -1,4 +1,3 @@
-
 #   nengo_bio -- Extensions to Nengo for more biological plausibility
 #   Copyright (C) 2019  Andreas Stöckel
 #
@@ -17,6 +16,8 @@
 
 import numpy as np
 
+from nengo_bio.internal.sequences import halton
+
 SAMPLE_CACHE = {}
 
 def sample_rates(dt,
@@ -30,15 +31,6 @@ def sample_rates(dt,
                  n_samples=1000,
                  rate_discretization=20,
                  T=10.0):
-    def halton(i, b):
-        f = 1
-        r = 0
-        while i > 0:
-            f = f / b
-            r = r + f * (i % b)
-            i = i // b
-        return r
-
     def discretize_rate(a):
         return int(np.ceil(a / rate_discretization) * rate_discretization)
 

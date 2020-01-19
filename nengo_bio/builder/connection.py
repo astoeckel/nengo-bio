@@ -158,7 +158,7 @@ def get_multi_ensemble_synapse_types(model, mens):
     return synapse_types
 
 
-def get_connectivity(conn, synapse_types, rng=np.random):
+def get_connection_matrix(conn, synapse_types, rng=np.random):
     # Create some convenient aliases
     Npre, Npost = conn.pre_obj.n_neurons, conn.post_obj.n_neurons
     mps = conn.max_n_post_synapses
@@ -184,18 +184,58 @@ def get_connectivity(conn, synapse_types, rng=np.random):
         if has_mps_I:
             mps_I = min(mps, mps_I)
 
-    connectivity = np.zeros((2, Npre, Npost), dtype=np.bool)
+    # Either fetch or generate the connection probability matrix
+    if conn.connectivity is None:
+        connectivity = np.ones((Npost, Npre)) / Npre
+    else:
+        if callable(conn.connectivity):
+            connectivity = conn.connectivity(Npost, Npre, rng,
+                conn.pre_obj, conn.post_obj)
+        else:
+            connectivity = np.copy(conn.connectivity)
+
+    # Make sure that connectivity has the right shape
+    if (connectivity.ndim != 2):
+        raise BuildError("connectivity must be a 2D {} x {} (Npost x Npre) "
+                         "matrix; got a {}D-matrix".format(
+                             Npost, Npre, connectivity.ndim))
+    if (connectivity.shape[0] != Npost) or (connectivity.shape[1] != Npre):
+        raise BuildError("connectivity must be a {} x {} (Npost x Npre) matrix, "
+                         "but got shape {} x {}".format(
+                             Npost, Npre, connectivity.shape[0],
+                             connectivity.shape[1]))
+
+    connection_matrix = np.zeros((2, Npre, Npost), dtype=np.bool)
     for i_post in range(Npost):
         # Get the indices of possible excitatory connection sites
-        i_exc, i_inh = np.where(synapse_types[0])[0], np.where(synapse_types[1])[0]
+        i_exc, i_inh = np.where(synapse_types[0])[0], np.where(
+            synapse_types[1])[0]
         n_exc, n_inh = i_exc.size, i_inh.size
+
+        # Fetch the excitatory neuron connection probabilities
+        p_exc = connectivity[i_post][i_exc]
+        if np.sum(p_exc) < 1e-12:
+            p_exc = np.ones(n_exc)
+        p_exc /= np.sum(p_exc)
+
+        # Fetch the inhibitory neuron connection probabilities
+        p_inh = connectivity[i_post][i_inh]
+        if np.sum(p_inh) < 1e-12:
+            p_inh = np.ones(n_inh)
+        p_inh /= np.sum(p_inh)
 
         # Select mps_E excitatory/mps_I inhibitory connections
         i_exc_sel, i_inh_sel = np.zeros((2, 0), dtype=np.int32)
         if has_mps_E:
-            i_exc_sel = rng.choice(i_exc, size=min(mps_E, n_exc), replace=False)
+            i_exc_sel = rng.choice(i_exc,
+                                   size=min(mps_E, n_exc),
+                                   replace=False,
+                                   p=p_exc)
         if has_mps_I:
-            i_inh_sel = rng.choice(i_inh, size=min(mps_I, n_inh), replace=False)
+            i_inh_sel = rng.choice(i_inh,
+                                   size=min(mps_I, n_inh),
+                                   replace=False,
+                                   p=p_inh)
 
         # We're done if both has_mps_E and has_mps_I are true. Otherwise, select
         # more neurons up to mps.
@@ -208,23 +248,30 @@ def get_connectivity(conn, synapse_types, rng=np.random):
                 mps_rem = mps
             mps_rem = max(0, mps_rem - i_exc_sel.size - i_inh_sel.size)
 
-            if has_mps_E: # Need to select inhibitory neurons
-                i_inh_sel = rng.choice(
-                    i_inh, size=min(mps_rem, n_inh), replace=False)
-            elif has_mps_I: # Need to select excitatory neurons
-                i_exc_sel = rng.choice(
-                    i_exc, size=min(mps_rem, n_exc), replace=False)
-            else: # Need to select both excitatory and inhibitory neurons
-                idcs = rng.choice(
-                    np.arange(0, n_inh + n_exc, dtype=np.int32),
-                    size=mps_rem, replace=False)
+            if has_mps_E:  # Need to select inhibitory neurons
+                i_inh_sel = rng.choice(i_inh,
+                                       size=min(mps_rem, n_inh),
+                                       replace=False, p=p_inh)
+            elif has_mps_I:  # Need to select excitatory neurons
+                i_exc_sel = rng.choice(i_exc,
+                                       size=min(mps_rem, n_exc),
+                                       replace=False, p=p_exc)
+            else:  # Need to select both excitatory and inhibitory neurons
+                p = connectivity[i_post]
+                if (np.sum(p)) < 1e-12:
+                    p = np.ones(n_inh + n_exc)
+                p /= np.sum(p)
+                idcs = rng.choice(np.arange(0, n_inh + n_exc, dtype=np.int32),
+                                  size=mps_rem,
+                                  replace=False, p=p)
                 i_exc_sel = i_exc[idcs[idcs < n_exc]]
                 i_inh_sel = i_inh[idcs[idcs >= n_exc] - n_exc]
 
-        # Set the corresponding entries in the connectivity matrix to true
-        connectivity[0, i_exc_sel, i_post] = True
-        connectivity[1, i_inh_sel, i_post] = True
-    return connectivity
+        # Set the corresponding entries in the connection matrix to true
+        connection_matrix[0, i_exc_sel, i_post] = True
+        connection_matrix[1, i_inh_sel, i_post] = True
+    return connection_matrix
+
 
 def remove_bias_current(model, ens):
     if not 'bias' in model.sig[ens.neurons]:
@@ -287,8 +334,8 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if conn.decode_bias:
             target_currents += bias
 
-        # Construct the connectivity matrix for this connection
-        connectivity = get_connectivity(conn, synapse_types, rng)
+        # Construct the connection matrix for this connection
+        connection_matrix = get_connection_matrix(conn, synapse_types, rng)
 
         # LIF neuron model parameters
         tuning = None
@@ -298,7 +345,8 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         i_th = 1.0
         if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
             i_th = conn.post_obj.neuron_type.threshold_current
-        WE, WI = solver(activities, target_currents, connectivity, i_th, tuning, rng)
+        WE, WI = solver(activities, target_currents, connection_matrix, i_th,
+                        tuning, rng)
 
         # If we're not targeting a MultiChannelNeuronType there really isn't
         # a distinction between excitatory and inhibitory input weights. Hence,
@@ -315,6 +363,7 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         built_connection.weights[solver.synapse_type][solver.neuron_indices].T)
 
     return None, W, None
+
 
 @nengo.builder.Builder.register(ConnectionPart)
 def build_connection(model, conn):

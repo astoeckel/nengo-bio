@@ -18,7 +18,7 @@
 name = "nengo_bio"
 
 # Expose commonly used objects
-from .connection import Connection
+from .connection import Connection, NeuralSheetConnectivity
 from .ensemble import Ensemble
 from .common import Excitatory, Inhibitory
 from .config import set_defaults

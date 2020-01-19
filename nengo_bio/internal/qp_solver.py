@@ -248,14 +248,14 @@ def solve_weights_qp(A,
     return x[:n_vars, 0]
 
 class SolverTask(collections.namedtuple('SolverTask', [
-        'Apre', 'Jpost', 'w', 'connectivity', 'iTh', 'nonneg', 'renormalise',
+        'Apre', 'Jpost', 'w', 'connection_matrix', 'iTh', 'nonneg', 'renormalise',
         'tol', 'reg', 'use_lstsq', 'valid', 'i', 'n_samples'
     ])):
     pass
 
 def _solve_single(t):
     # Fetch the excitatory and inhibitory pre-neurons
-    exc, inh = t.connectivity
+    exc, inh = t.connection_matrix
     Npre_exc = np.sum(exc)
     Npre_inh = np.sum(inh)
     Npre_tot = Npre_exc + Npre_inh
@@ -345,7 +345,7 @@ def _solve_single(t):
 def solve(Apre,
           Jpost,
           ws,
-          connectivity=None,
+          connection_matrix=None,
           iTh=None,
           nonneg=True,
           renormalise=True,
@@ -364,9 +364,9 @@ def solve(Apre,
     Npre = Apre.shape[1]
     Npost = Jpost.shape[1]
 
-    # Use an all-to-all connection if connectivity is set to None
-    if connectivity is None:
-        connectivity = np.ones((2, Npre, Npost), dtype=np.bool)
+    # Use an all-to-all connection if connection_matrix is set to None
+    if connection_matrix is None:
+        connection_matrix = np.ones((2, Npre, Npost), dtype=np.bool)
 
     # Create a neuron model parameter vector for each neuron, if the parameters
     # are not already in this format
@@ -387,7 +387,7 @@ def solve(Apre,
     # Iterate over each post-neuron individually and solve for weights. Do so
     # in parallel.
     tasks = [SolverTask(
-        Apre, Jpost[:, i], ws[i], connectivity[:, :, i], iTh,
+        Apre, Jpost[:, i], ws[i], connection_matrix[:, :, i], iTh,
         nonneg, renormalise, tol, reg, use_lstsq,
         valid[:, i], i, m) for i in range(Npost)]
     WE, WI = np.zeros((2, Npre, Npost))
@@ -397,7 +397,7 @@ def solve(Apre,
             for i, we, wi, warning_msgs in pool.imap_unordered(_solve_single, tasks):
                 for msg in warning_msgs:
                     print('Warning: {}'.format(msg))
-                exc, inh = connectivity[:, :, i]
+                exc, inh = connection_matrix[:, :, i]
                 WE[exc, i], WI[inh, i] = we, wi
 
     return WE, WI
