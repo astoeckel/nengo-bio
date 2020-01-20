@@ -14,11 +14,47 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import warnings
 import numpy as np
 
 from nengo.params import BoolParam, NumberParam
 from nengo.solvers import Solver
-from nengo_bio.internal import qp_solver
+
+_solve_qp = None
+
+def _get_solve_qp_instance():
+    # Only run the below code once
+    global _solve_qp
+    if not _solve_qp is None:
+        return _solve_qp
+
+    # Determine which library to use
+    try:
+        import bioneuronqp
+        try:
+            bioneuronqp.solve(
+                np.ones((10, 5)),
+                np.ones((10, 3)),
+                np.array([0.0, 1.0, -1.0, 1.0, 0.0, 0.0]))
+            _solve_qp = bioneuronqp.solve
+            return _solve_qp
+        except OSError:
+            warnings.warn(
+                "bioneuronqp is installed, but did not find libbioneuronqp.so; "
+                "make sure the library is located in your search path",
+                category=UserWarning)
+    except ImportError:
+        warnings.warn(
+            "Install the bioneuronqp library to make solving for weights "
+            "faster",
+            category=UserWarning)
+        import nengo_bio.internal.qp_solver
+
+    # Use the internal solver instead
+    import nengo_bio.internal.qp_solver
+    _solve_qp = nengo_bio.internal.qp_solver.solve
+    return _solve_qp
+
 
 class ExtendedSolver(Solver):
     """
@@ -55,10 +91,11 @@ class QPSolver(ExtendedSolver):
     reg = NumberParam('reg', low=0)
     relax = BoolParam('relax')
 
-    def __init__(self, reg=1e-3, relax=False):
+    def __init__(self, reg=1e-3, relax=False, extra_args=None):
         super().__init__()
         self.reg = reg
         self.relax = relax
+        self.extra_args = {} if extra_args is None else extra_args
 
     def __call__(self, A, J, connection_matrix, i_th, tuning, rng=np.random):
         # Neuron model parameters. For now we only support current-based LIF
@@ -78,6 +115,7 @@ class QPSolver(ExtendedSolver):
         # current relaxation
         use_lstsq = i_th is None
 
-        return qp_solver.solve(A, J, ws, connection_matrix,
-                               iTh=i_th, reg=reg, use_lstsq=use_lstsq)
+        return _get_solve_qp_instance()(
+            A, J, ws, connection_matrix, iTh=i_th, reg=reg,
+            use_lstsq=use_lstsq, **self.extra_args)
 
