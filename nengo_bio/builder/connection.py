@@ -14,24 +14,33 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import collections
 import warnings
 import numpy as np
 
 from nengo_bio.common import Excitatory, Inhibitory
-from nengo_bio.connection import ConnectionPart, Connection
+from nengo_bio.connection import \
+    ConnectionPart, \
+    Connection, \
+    Connectivity, \
+    UnconstrainedConnectivity, \
+    ConstrainedConnectivity, \
+    DefaultConnectivity
 from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 from nengo_bio.neurons import MultiChannelNeuronType
 
 from nengo.exceptions import NengoWarning, BuildError
 from nengo.ensemble import Ensemble, Neurons
+from nengo.utils.numpy import is_array_like
 
 import nengo.builder
 from nengo.builder.operator import Copy, Reset
 
+built_attrs = ["weights", "connectivity"]
 
-class BuiltConnection:
-    def __init__(self):
-        self.weights = {Excitatory: None, Inhibitory: None}
+
+class BuiltConnection(collections.namedtuple('BuiltConnection', built_attrs)):
+    pass
 
 
 def get_multi_ensemble_eval_points(model,
@@ -158,119 +167,58 @@ def get_multi_ensemble_synapse_types(model, mens):
     return synapse_types
 
 
-def get_connection_matrix(conn, synapse_types, rng=np.random):
-    # Create some convenient aliases
-    Npre, Npost = conn.pre_obj.n_neurons, conn.post_obj.n_neurons
-    mps = conn.max_n_post_synapses
-    mps_E, mps_I = conn.max_n_post_synapses_exc, conn.max_n_post_synapses_inh
-    has_mps = not (mps is None)
-    has_mps_E, has_mps_I = not (mps_E is None), not (mps_I is None)
+def get_connection_matrix(model, conn, synapse_types, rng=np.random):
+    # Create the empty synapse type map
+    pre_obj, post_obj = conn.pre_obj, conn.post_obj
+    n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
 
-    # If no restrictions were given, just allow all-to-all connections
-    if not (has_mps or has_mps_E or has_mps_I):
-        return np.array(
-            (np.tile(synapse_types[0, :, None],
-                     Npost), np.tile(synapse_types[1, :, None], Npost)),
-            dtype=np.bool)
-    if has_mps and has_mps_E and has_mps_I:
-        raise BuildError(
-            "Specifying max_n_post_synapses as well as both "
-            "max_n_post_synapses_exc and max_n_post_synapses_inh is invalid.")
+    # Create the connectivity matrix
+    connectivity = np.empty((2, n_post, n_pre), dtype=np.bool)
 
-    # Limit mps_E and mps_I to mps
-    if has_mps:
-        if has_mps_E:
-            mps_E = min(mps, mps_E)
-        if has_mps_I:
-            mps_I = min(mps, mps_I)
+    # Iterate over all pre-ensembles in the multi-ensemble
+    arr_ens, arr_ns, _ = conn.pre_obj.flatten()
+    connectivity_cache = {}
+    for ens, ns in zip(arr_ens, arr_ns):
+        # If the connectivity object is a dictionary, check whether an entry for
+        # exactly this connection exists
+        connectivity_descr = None
+        connectivity_key = (ens, post_obj)
+        if isinstance(conn.connectivity, dict):
+            if connectivity_key in conn.connectivity:
+                connectivity_descr = conn.connectivity[connectivity_key]
+        elif isinstance(conn.connectivity, Connectivity):
+            connectivity_descr = conn.connectivity
 
-    # Either fetch or generate the connection probability matrix
-    if conn.connectivity is None:
-        connectivity = np.ones((Npost, Npre)) / Npre
-    else:
-        if callable(conn.connectivity):
-            connectivity = conn.connectivity(Npost, Npre, rng,
-                conn.pre_obj, conn.post_obj)
+        # The connectivity descriptor should default to default_connectivity
+        if connectivity_descr is None:
+            connectivity_descr = DefaultConnectivity()
+
+        # Build the connectivity matrix according to the connectivity
+        # descriptor. Use already computed connectivity from the connectivity
+        # cache if the same neurons are connected multiple times.
+        if connectivity_key in connectivity_cache:
+            C = connectivity_cache[connectivity_key]
         else:
-            connectivity = np.copy(conn.connectivity)
+            C = model.build(connectivity_descr, ens, post_obj, rng)
+            connectivity_cache[connectivity_key] = C
 
-    # Make sure that connectivity has the right shape
-    if (connectivity.ndim != 2):
-        raise BuildError("connectivity must be a 2D {} x {} (Npost x Npre) "
-                         "matrix; got a {}D-matrix".format(
-                             Npost, Npre, connectivity.ndim))
-    if (connectivity.shape[0] != Npost) or (connectivity.shape[1] != Npre):
-        raise BuildError("connectivity must be a {} x {} (Npost x Npre) matrix, "
-                         "but got shape {} x {}".format(
-                             Npost, Npre, connectivity.shape[0],
-                             connectivity.shape[1]))
+        # If the connectivity descriptor returns "None", just build all-to-all
+        # connections
+        if C is None:
+            connectivity[:, :, ns] = np.ones((2, n_post, ens.n_neurons))
+        else:
+            connectivity[:, :, ns] = C
 
-    connection_matrix = np.zeros((2, Npre, Npost), dtype=np.bool)
-    for i_post in range(Npost):
-        # Get the indices of possible excitatory connection sites
-        i_exc, i_inh = np.where(synapse_types[0])[0], np.where(
-            synapse_types[1])[0]
-        n_exc, n_inh = i_exc.size, i_inh.size
+    # Issue warnings for unused elements in the connectivity dictionary
+    if isinstance(conn.connectivity, dict):
+        for key in conn.connectivity.keys():
+            if not key in connectivity_cache:
+                warnings.warn(
+                    NengoWarning(
+                        "Connectivity descriptor ({}, {}) not used".format(
+                            pre_obj, post_obj)))
 
-        # Fetch the excitatory neuron connection probabilities
-        p_exc = connectivity[i_post][i_exc]
-        if np.sum(p_exc) < 1e-12:
-            p_exc = np.ones(n_exc)
-        p_exc /= np.sum(p_exc)
-
-        # Fetch the inhibitory neuron connection probabilities
-        p_inh = connectivity[i_post][i_inh]
-        if np.sum(p_inh) < 1e-12:
-            p_inh = np.ones(n_inh)
-        p_inh /= np.sum(p_inh)
-
-        # Select mps_E excitatory/mps_I inhibitory connections
-        i_exc_sel, i_inh_sel = np.zeros((2, 0), dtype=np.int32)
-        if has_mps_E:
-            i_exc_sel = rng.choice(i_exc,
-                                   size=min(mps_E, n_exc),
-                                   replace=False,
-                                   p=p_exc)
-        if has_mps_I:
-            i_inh_sel = rng.choice(i_inh,
-                                   size=min(mps_I, n_inh),
-                                   replace=False,
-                                   p=p_inh)
-
-        # We're done if both has_mps_E and has_mps_I are true. Otherwise, select
-        # more neurons up to mps.
-        if not (has_mps_E and has_mps_I):
-            # If no maximum number of synapses is set, set it to the maximum
-            # number of synapses that are still available
-            if not has_mps:
-                mps_rem = n_exc + n_inh
-            else:
-                mps_rem = mps
-            mps_rem = max(0, mps_rem - i_exc_sel.size - i_inh_sel.size)
-
-            if has_mps_E:  # Need to select inhibitory neurons
-                i_inh_sel = rng.choice(i_inh,
-                                       size=min(mps_rem, n_inh),
-                                       replace=False, p=p_inh)
-            elif has_mps_I:  # Need to select excitatory neurons
-                i_exc_sel = rng.choice(i_exc,
-                                       size=min(mps_rem, n_exc),
-                                       replace=False, p=p_exc)
-            else:  # Need to select both excitatory and inhibitory neurons
-                p = connectivity[i_post]
-                if (np.sum(p)) < 1e-12:
-                    p = np.ones(n_inh + n_exc)
-                p /= np.sum(p)
-                idcs = rng.choice(np.arange(0, n_inh + n_exc, dtype=np.int32),
-                                  size=mps_rem,
-                                  replace=False, p=p)
-                i_exc_sel = i_exc[idcs[idcs < n_exc]]
-                i_inh_sel = i_inh[idcs[idcs >= n_exc] - n_exc]
-
-        # Set the corresponding entries in the connection matrix to true
-        connection_matrix[0, i_exc_sel, i_post] = True
-        connection_matrix[1, i_inh_sel, i_post] = True
-    return connection_matrix
+    return connectivity
 
 
 def remove_bias_current(model, ens):
@@ -287,6 +235,89 @@ def remove_bias_current(model, ens):
                 model.add_op((Reset(sig_post_in)))
 
 
+@nengo.builder.Builder.register(UnconstrainedConnectivity)
+def build_unconstrained_connectivity(model, cty, pre_obj, post_obj, rng):
+    # Put no constraints on the connections whatsoever
+    return None
+
+
+@nengo.builder.Builder.register(DefaultConnectivity)
+def build_default_connectivity(model, cty, pre_obj, post_obj, rng):
+    # Fetch the number of pre- and post neurons
+    n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
+
+    # Fetch the constructed pre object
+    built_pre_obj = model.params[pre_obj]
+    connectivity = np.zeros((2, n_post, n_pre), dtype=np.bool)
+    for i, type_ in enumerate((Excitatory, Inhibitory)):
+        if hasattr(built_pre_obj, "synapse_types"):
+            connectivity[i] = built_pre_obj.synapse_types[type_][None, :]
+        else:
+            connectivity[i] = np.ones((n_post, n_pre), dtype=np.bool)
+
+    return connectivity
+
+
+@nengo.builder.Builder.register(ConstrainedConnectivity)
+def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
+    # Create some convenient aliases
+    n_cov, n_div = cty.convergence, cty.divergence
+    n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
+
+    # Create the default connectivity matrix
+    cs = build_default_connectivity(model, cty,
+                                    pre_obj, post_obj, rng)
+
+    # Fetch the connection probabilities
+    ps = None
+    if not cty.probabilities is None:
+        if callable(cty.probabilities):
+            ps = cty.probabilities(n_pre, n_post, pre_obj, post_obj, model.params)
+        elif is_array_like(cty.probabilities):
+            ps = cty.probabilities
+
+        if (not ps is None) and ((ps.ndim != 2) or (ps.shape[0] != n_post) or (ps.shape[1] != n_pre)):
+            raise ValueError(
+                "Invalid connection probability matrix. Expected matrix of "
+                "shape {} x {} (n_post x n_pre)".format(n_post, n_pre))
+
+    # Helper function used for restricting both the convergence and divergence
+    def apply_constraints(n, cs, ps):
+        if not ps is None:
+            assert cs.shape[1] == ps.shape[0]
+            assert cs.shape[2] == ps.shape[1]
+
+        for i in range(cs.shape[1]):
+            # Compute the pre-neuron indices that are available at all
+            idcs_syn, idcs = np.where(cs[:, i, :] != 0)
+            n_available = min(n, idcs.size)
+
+            # If the "p" matrix is given, compute the probabilities for any of
+            # these synapses to be connected
+            probabilities = None
+            if not ps is None:
+                probabilities = ps[i, idcs] / np.sum(ps[i, idcs])
+
+            # Select the pre-synapses
+            sel = np.random.choice(np.arange(idcs.size, dtype=np.int),
+                                   size=n_available,
+                                   replace=False,
+                                   p=probabilities)
+            cs[:, i, :] = False
+            cs[idcs_syn[sel], i, idcs[sel]] = True
+
+    # Restrict the convergence numbers
+    if not n_cov is None:
+        apply_constraints(n_cov, cs, ps)
+
+    # Restrict the divergence numbers
+    if not n_div is None:
+        apply_constraints(n_div,
+                          np.transpose(cs, (0, 2, 1)),
+                          None if ps is None else ps.T)
+
+    return cs
+
 @nengo.builder.Builder.register(SolverWrapper)
 def build_solver(model, solver, _, rng, *args, **kwargs):
     # Fetch the high-level connection
@@ -295,9 +326,6 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
 
     # If the high-level connection object has not been built, build it
     if not conn in model.params:
-        ### TODO: Move to build_connection
-        model.params[conn] = built_connection = BuiltConnection()
-
         # Remove the bias current from the target ensemble
         if conn.decode_bias:
             remove_bias_current(model, conn.post_obj)
@@ -335,7 +363,8 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
             target_currents += bias
 
         # Construct the connection matrix for this connection
-        connection_matrix = get_connection_matrix(conn, synapse_types, rng)
+        connectivity = get_connection_matrix(
+            model, conn, synapse_types, rng)
 
         # LIF neuron model parameters
         tuning = None
@@ -345,7 +374,7 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         i_th = 1.0
         if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
             i_th = conn.post_obj.neuron_type.threshold_current
-        WE, WI = solver(activities, target_currents, connection_matrix, i_th,
+        WE, WI = solver(activities, target_currents, connectivity, i_th,
                         tuning, rng)
 
         # If we're not targeting a MultiChannelNeuronType there really isn't
@@ -354,8 +383,9 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if not isinstance(conn.post_obj.neuron_type, MultiChannelNeuronType):
             WI = -WI
 
-        built_connection.weights[Excitatory] = WE
-        built_connection.weights[Inhibitory] = WI
+        built_connection = model.params[conn] = BuiltConnection({
+            Excitatory: WE, Inhibitory: WI
+        }, connectivity)
     else:
         built_connection = model.params[conn]
 
@@ -409,4 +439,3 @@ def build_connection(model, conn):
                          inc=True,
                          tag="{}.{}".format(conn, conn.kind)))
                 break
-

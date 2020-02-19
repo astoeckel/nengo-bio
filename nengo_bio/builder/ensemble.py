@@ -27,10 +27,14 @@ import nengo.dists
 import nengo.builder.ensemble
 import nengo.builder.signal
 
+built_attrs = nengo.builder.ensemble.built_attrs + [
+    "synapse_types", "locations", "tuning"
+]
 
-built_attrs = nengo.builder.ensemble.built_attrs + ["synapse_types", "tuning"]
+
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
+
 
 @nengo.builder.Builder.register(Ensemble)
 def build_ensemble(model, ens):
@@ -45,8 +49,9 @@ def build_ensemble(model, ens):
         synapse_types_inh = np.ones(ens.n_neurons, dtype=np.bool)
     else:
         # Otherwise select a random neuron type per neuron
-        synapse_types_exc = rng.choice(
-            [True, False], ens.n_neurons, p=(ens.p_exc, ens.p_inh))
+        synapse_types_exc = rng.choice([True, False],
+                                       ens.n_neurons,
+                                       p=(ens.p_exc, ens.p_inh))
         synapse_types_inh = ~synapse_types_exc
 
     # Store the model parameters in the extended BuiltEnsemble named tuple
@@ -55,19 +60,35 @@ def build_ensemble(model, ens):
         Inhibitory: synapse_types_inh
     }
 
+    # Assign the neuron locations in case the ensemble has the "locations"
+    # attribute set
+    if ens.locations is None:
+        locations = None
+    elif isinstance(ens.locations, nengo.dists.Distribution):
+        locations = nengo.dists.get_samples(ens.locations,
+                                            ens.n_neurons,
+                                            None,
+                                            rng=rng)
+    else:
+        locations = npext.array(ens.locations, min_dims=2, dtype=np.float64)
+
     # If this ensemble uses a default neuron type, just call the default
     # ensemble build function.
     if not isinstance(ens.neuron_type, MultiChannelNeuronType):
         nengo.builder.ensemble.build_ensemble(model, ens)
-        model.params[ens] = BuiltEnsemble(*model.params[ens], synapse_types, None)
+        model.params[ens] = BuiltEnsemble(*model.params[ens], synapse_types,
+                                          locations, None)
         return
 
     # Otherwise generate the evaluation points, encoders, gains, biases manually
-    eval_points = nengo.builder.ensemble.gen_eval_points(
-        ens, ens.eval_points, rng=rng)
+    eval_points = nengo.builder.ensemble.gen_eval_points(ens,
+                                                         ens.eval_points,
+                                                         rng=rng)
     if isinstance(ens.encoders, nengo.dists.Distribution):
-        encoders = nengo.dists.get_samples(
-            ens.encoders, ens.n_neurons, ens.dimensions, rng=rng)
+        encoders = nengo.dists.get_samples(ens.encoders,
+                                           ens.n_neurons,
+                                           ens.dimensions,
+                                           rng=rng)
     else:
         encoders = npext.array(ens.encoders, min_dims=2, dtype=np.float64)
     if ens.normalize_encoders:
@@ -85,6 +106,7 @@ def build_ensemble(model, ens):
                                       gain=gain,
                                       bias=bias,
                                       synapse_types=synapse_types,
+                                      locations=locations,
                                       tuning=None)
 
     # Call the "tune" function of the neuron type to give the neuron type
@@ -94,21 +116,21 @@ def build_ensemble(model, ens):
 
     # Setup dummy input signals causing the original nengo code to work
     n_neurons, n_inputs = ens.n_neurons, ens.neuron_type.n_inputs
-    sig = nengo.builder.signal.Signal(
-        np.zeros(0), name="{}.neuron_in".format(ens))
+    sig = nengo.builder.signal.Signal(np.zeros(0),
+                                      name="{}.neuron_in".format(ens))
     model.sig[ens.neurons]['in'] = sig
-    model.sig[ens]['in'] =  None
+    model.sig[ens]['in'] = None
 
     # Setup the actual input signals
     for i in range(n_inputs):
-        sig = nengo.builder.signal.Signal(
-            np.zeros(n_neurons), name="{}.neuron_in".format(ens))
+        sig = nengo.builder.signal.Signal(np.zeros(n_neurons),
+                                          name="{}.neuron_in".format(ens))
         model.sig[ens.neurons]['in_{}'.format(i)] = sig
         model.add_op(Reset(sig))
 
     # Output signal
-    sig = nengo.builder.signal.Signal(
-        np.zeros(n_neurons), name="{}.neuron_out".format(ens))
+    sig = nengo.builder.signal.Signal(np.zeros(n_neurons),
+                                      name="{}.neuron_out".format(ens))
     model.sig[ens.neurons]['out'] = sig
     model.sig[ens]['out'] = sig
 

@@ -18,7 +18,9 @@ import numpy as np
 import collections
 
 from nengo_bio.common import steal_param, Excitatory, Inhibitory
+from nengo_bio.dists import NeuralSheetDist
 
+import nengo.dists
 import nengo.ensemble
 import nengo.builder
 
@@ -26,9 +28,14 @@ class Ensemble(nengo.ensemble.Ensemble):
     """
     Wrapper class for creating a Dale's Principle enabled neuron population.
     All parameters are passed to the nengo Population object, except for the new
-    p_exc and p_inh parameters. These parameters indicate the relative number of
-    excitatory and inhibitory neurons.
+    p_exc, p_inh, and location parameters. These parameters indicate the
+    relative number of excitatory and inhibitory neurons.
     """
+
+    locations = nengo.dists.DistOrArrayParam('locations',
+                                default=None,
+                                optional=True,
+                                sample_shape=('n_neurons', '*'))
 
     @staticmethod
     def _coerce_p_exc_inh(p_exc, p_inh, ens=None):
@@ -49,6 +56,7 @@ class Ensemble(nengo.ensemble.Ensemble):
                         "p_exc={} must be between 0.0 and 1.0 for {}"
                         .format(p_exc, ens))
                 p_inh = 1.0 - p_exc
+
             # At least p_inh is given, check range
             elif has_p_inh:
                 if p_inh < 0.0 or p_inh > 1.0:
@@ -60,12 +68,14 @@ class Ensemble(nengo.ensemble.Ensemble):
 
     def __init__(self, *args, **kw_args):
         """
-        Forwards all parameters except for p_exc and p_inh to the parent
-        Ensemble class.
+        Forwards all parameters except for p_exc, p_inh, and location to the
+        parent Ensemble class.
         """
 
         self._p_exc, _ = Ensemble._coerce_p_exc_inh(
             steal_param('p_exc', kw_args), steal_param('p_inh', kw_args), self)
+
+        self.locations = steal_param('locations', kw_args)
 
         super(Ensemble, self).__init__(*args, **kw_args)
 

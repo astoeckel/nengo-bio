@@ -21,8 +21,9 @@ from nengo_bio.solvers import SolverWrapper, QPSolver
 from nengo_bio.internal.sequences import hilbert_curve
 
 from nengo.utils.numpy import is_array_like
-from nengo.params import Parameter, BoolParam, IntParam, StringParam, \
-                         NdarrayParam, Default, Unconfigurable
+from nengo.params import Parameter, BoolParam, IntParam, NumberParam, \
+                         StringParam, NdarrayParam, Default, Unconfigurable, \
+                         FrozenObject
 
 import nengo.base
 import nengo.config
@@ -82,7 +83,7 @@ class MultiEnsemble(nengo.base.SupportDefaultsMixin):
         # Determine the operator type depending on whether the given descriptor
         # is a tuple, set, or just an ensemble
         if isinstance(descr, SUPPORTED_NENGO_OBJS) and \
-           ((operator is None) or (operator == OP_NONE)):
+           ((operator is None) or (operator == MultiEnsemble.OP_NONE)):
             self.operator = MultiEnsemble.OP_NONE
             self.objs = (descr, )
         elif isinstance(descr, tuple) and (operator is None):
@@ -222,12 +223,13 @@ class ConnectionFunctionParam(nengo.connection.ConnectionFunctionParam):
         type_pre = type(conn.pre_obj).__name__
 
 
-class ConnectivityParam(Parameter):
-    """Parameter that can either be a callable or a Npost x Npre connection
-       probability matrix. The matrix must be normalised such that the sum
-       over all possible pre-neuron probabilities is one."""
-    def __init__(self, name):
-        super().__init__(name, default=None, optional=True, readonly=False)
+class ConnectivityProbabilitiesParam(Parameter):
+    """
+    The ConnectivityProbabilitiesParam class describes the data that can be
+    passed to the "probabilities" property of the ConstrainedConnectivity class.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def coerce(self, instance, obj):
         # Do nothing if no object is given -- that's fine
@@ -253,85 +255,220 @@ class ConnectivityParam(Parameter):
         return obj
 
 
-class NeuralSheetConnectivity:
-    """Callable that can be passed to "connectivity". Arranges the pre and post
-       neurons in a 2D grid and computes connection probabilities based on the
-       spatial distance."""
-    @staticmethod
-    def compute_connectivity(n_post,
-                             n_pre,
-                             sigma=1.0,
-                             rng=None,
-                             obj_post=None,
-                             obj_pre=None):
-        """
-        Computes the matrix connectivity for the given parameters.
+class Connectivity(FrozenObject):
+    """
+    Base class for all connectivity implementations. Deriving classes must
+    implement the "__call__" method.
+    """
+    @property
+    def _argreprs(self):
+        return []
 
-        n_post: number of post-neurons
-        n_pre: number of pre-neurons
-        sigma: standard-deviation of the Gaussian used for the connection
-        probability computation.
-        rng: random number generator used to select the neuron locations.
-        obj_post, obj_pre: if not None, uses the id of this object to seed the
-        location generation for the pre/post object. This ensures that the same
-        neuron locations are used for multiple connections.
-        """
 
-        # Generates n x/y locations arranged in a grid
-        def mkgrid(n, rng):
-            order = int(np.ceil(np.log2(np.ceil(np.sqrt(max(1, n))))))
-            N = 2**order
+class UnconstrainedConnectivity(Connectivity):
+    """
+    Use of this class explicitly indicates that there are no constraints on the
+    connectivity, including Dale's principle being ignored.
+    """
+    pass
 
-            xs, ys = np.zeros((2, N, N))
-            for i in range(0, N):
-                for j in range(0, N):
-                    k = i * N + j
-                    xs[i, j], ys[i, j] = hilbert_curve(k, order)
 
-            # Add some random jitter (move each point by at most one cell)
-            xs += rng.uniform(-0.5, 0.5, xs.shape)
-            ys += rng.uniform(-0.5, 0.5, ys.shape)
+class DefaultConnectivity(Connectivity):
+    """
+    Connectivity class taking Dale's principle into account. This is the
+    default.
+    """
+    pass
 
-            # Normalise the points to [-1.0, 1.0]
-            xs = 1.0 - 2.0 * (xs + 0.5) / N
-            ys = 1.0 - 2.0 * (ys + 0.5) / N
 
-            # Randomly pick n samples
-            idcs = np.sort(rng.choice(N * N, n, replace=False))
-            return xs.flatten()[idcs], ys.flatten()[idcs]
+class ConstrainedConnectivity(Connectivity):
+    """
+    This class can be used to specify convergence and divergence parameters for
+    a connection. Furthermore, an optional probability matrix or callable can be
+    supplied that computes connection probabilities between individual neurons.
+    """
 
-        # Returns an rng specific for the given object, if an object is given
-        def rng_for_obj(obj):
-            if obj is None:
-                return np.random if rng is None else rng
-            return np.random.RandomState(id(obj) & 0xFFFFFFFF)
+    convergence = IntParam(
+        name="convergence",
+        optional=True,
+        readonly=True,
+    )
 
-        # Assign an x/y location to each neuron
-        xs_post, ys_post = mkgrid(n_post, rng_for_obj(obj_post))
-        xs_pre, ys_pre = mkgrid(n_pre, rng_for_obj(obj_pre))
+    divergence = IntParam(
+        name="divergence",
+        optional=True,
+        readonly=True,
+    )
 
-        # Compute the distance between each point
-        dist = np.sqrt(
-            np.square(xs_pre[None, :] - xs_post[:, None]) +
-            np.square(ys_pre[None, :] - ys_post[:, None]))
+    probabilities = ConnectivityProbabilitiesParam(
+        name="probabilities",
+        default=None,
+        optional=True,
+        readonly=True,
+    )
 
-        # Turn the distances into connection probabilities
-        p = np.exp(dist / (-np.square(sigma)))
-        p /= np.sum(p, axis=1)[:, None]
+    @property
+    def _argreprs(self):
+        return [
+            "convergence={}".format(self.convergence),
+            "divergence={}".format(self.divergence),
+            "probabilities={}".format(self.probabilities),
+        ]
 
-        return p, {
-            "xs_pre": xs_pre,
-            "ys_pre": ys_pre,
-            "xs_post": xs_post,
-            "ys_post": ys_post
-        }
+    def __init__(self, convergence=None, divergence=None, probabilities=None):
+        super().__init__()
 
-    def __init__(self, sigma=1.0):
+        self.convergence = convergence
+        self.divergence = divergence
+        self.probabilities = probabilities
+
+
+class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
+    """
+    Same as "ConstrainedConnectivity", but with a default callback for the
+    "probabilities" callback that computes connection probabilities based on the
+    location of the neurons.
+    """
+
+    sigma = NumberParam(
+        name="sigma",
+        low=0.0,
+        default=1.0,
+        low_open=True,
+        readonly=True,
+    )
+
+    projection = NdarrayParam(
+        name="projection",
+        default=np.zeros((0, )),
+        optional=True,
+        shape=('*'),
+        readonly=True,
+    )
+
+    @property
+    def _argreprs(self):
+        return super()._argreprs + [
+            "sigma={}".format(self.sigma),
+            "projection={}".format(self.projection),
+        ]
+
+    def get_probabilities(self, n_pre, n_post, pre_obj, post_obj, data):
+        # Fetch the neuron locations
+        xs_pre = data[pre_obj].locations
+        xs_post = data[post_obj].locations
+
+        # We cannot compute connectivity constraints if the locations are not
+        # defined -- just use uniform connection probabilities (by returning
+        # "None")
+        if (xs_pre is None) or (xs_post is None):
+            return None
+
+        # Make sure the number of pre-neurons and the number of post-neurons
+        # are correct
+        if xs_pre.ndim != 2:
+            raise ValueError(
+                "Pre-population neuron locations must be a 2D array, "
+                "but got {}D array".format(xs_pre.ndim))
+        if xs_post.ndim != 2:
+            raise ValueError(
+                "Post-population neuron locations must be a 2D array, "
+                "but got {}D array".format(xs_pre.ndim))
+        if n_pre != xs_pre.shape[0]:
+            raise ValueError(
+                "Expected pre-population neuron location shape ({}, d_pre), "
+                "but got ({}, d_pre)".format(n_pre, xs_pre.shape[0]))
+        if n_post != xs_post.shape[0]:
+            raise ValueError(
+                "Expected post-population neuron location shape ({}, d_post), "
+                "but got ({}, d_post)".format(n_post, xs_post.shape[0]))
+
+        # Fetch the dimensionality of the neuron locations
+        d_pre, d_post = xs_pre.shape[1], xs_post.shape[1]
+
+        # Project the locations onto the minimum dimensionality
+        d_min, d_max = min(d_pre, d_post), max(d_pre, d_post)
+        P = np.eye(d_min,
+                   d_max) if self.projection.size == 0 else self.projection
+
+        # Make sure the projection vector has the correct size
+        if (P.shape[0] != d_min and (d_min != d_max)) or (P.shape[1] != d_max):
+            raise ValueError("Expected a projection matrix of size ({}, {}), "
+                             "but got projection vector of shape {}".format(
+                                 d_min, d_max, P.shape))
+
+        # Apply the projection
+        if xs_pre.shape[1] == d_max:
+            xs_pre = xs_pre @ P.T
+        if xs_post.shape[1] == d_max:
+            xs_post = xs_post @ P.T
+
+        # Compute the squared distance
+        dists = np.sum(np.square(xs_pre[None, :] - xs_post[:, None]), axis=-1)
+        print(dists.shape)
+
+        # Apply exponential falloff
+        return np.exp(-dists / np.square(self.sigma))
+
+    def __init__(self,
+                 convergence=None,
+                 divergence=None,
+                 probabilities=None,
+                 sigma=1.0,
+                 projection=None):
+
+        # Call the inherited constructor
+        super().__init__(convergence, divergence, probabilities)
+
+        # Copy the sigma parameters
         self.sigma = sigma
 
-    def __call__(self, n_post, n_pre, rng, obj_post=None, obj_pre=None):
-        return NeuralSheetConnectivity.compute_connectivity(
-            n_post, n_pre, self.sigma, rng, obj_post, obj_pre)[0]
+        # Copy the projection parameter
+        if probabilities is None:
+
+            def get_probabilities_wrapper(*args, **kwargs):
+                return self.get_probabilities(*args, **kwargs)
+
+            self.probabilities = get_probabilities_wrapper
+        else:
+            self.probabilities = probabilities
+
+
+class ConnectivityParam(Parameter):
+    """
+    The ConnectivityParam class describes the data that can be passed to the
+    "connectivity" property of the Connection class. The parameter may either
+    be an instance of one of the classes derived from "Connectivity", or a
+    dictionary mapping from (pre, post) tuples onto an instance of the
+    "Connectivity" class.
+    """
+    def __init__(self, name):
+        super().__init__(name,
+                         default=DefaultConnectivity(),
+                         optional=True,
+                         readonly=False)
+
+    def coerce(self, instance, obj):
+        # Make sure obj is either an instance of "Connectivity" or a dictionary
+        # of the right format
+        if isinstance(obj, Connectivity):
+            return obj
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                if (not isinstance(key, tuple)) or (len(key) != 2):
+                    raise ValueError(
+                        "Expected 2-tuple (pre, post) as connectivity dictionary "
+                        "keys, but got {}".format(key))
+                if not isinstance(value, Connectivity):
+                    raise ValueError(
+                        "Expected instance of class Connectivity as dictionary "
+                        "keys")
+            return obj
+        else:
+            raise ValueError(
+                "\"connectivity\" must either be an instance of "
+                "the \"Connectivity\" class or a dictionary mapping from "
+                "(pre, post) tuples onto instances of the Connectivity class.")
 
 
 # Nengo 2.8 compatibility
@@ -369,19 +506,6 @@ class Connection(nengo.config.SupportDefaultsMixin):
     n_eval_points = IntParam('n_eval_points', default=None, optional=True)
     decode_bias = BoolParam('decode_bias', default=True)
 
-    max_n_post_synapses = IntParam('max_n_post_synapses',
-                                   low=0,
-                                   default=None,
-                                   optional=True)
-    max_n_post_synapses_exc = IntParam('max_n_post_synapses_exc',
-                                       low=0,
-                                       default=None,
-                                       optional=True)
-    max_n_post_synapses_inh = IntParam('max_n_post_synapses_inh',
-                                       low=0,
-                                       default=None,
-                                       optional=True)
-
     connectivity = ConnectivityParam('connectivity')
 
     _param_init_order = [
@@ -400,9 +524,6 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  scale_eval_points=Default,
                  n_eval_points=Default,
                  decode_bias=Default,
-                 max_n_post_synapses=Default,
-                 max_n_post_synapses_exc=Default,
-                 max_n_post_synapses_inh=Default,
                  connectivity=Default,
                  label=Default,
                  seed=Default):
@@ -423,10 +544,6 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.function_info = function
         self.transform = transform
         self.solver = solver
-
-        self.max_n_post_synapses = max_n_post_synapses
-        self.max_n_post_synapses_exc = max_n_post_synapses_exc
-        self.max_n_post_synapses_inh = max_n_post_synapses_inh
         self.connectivity = connectivity
 
         # For each pre object add two actual nengo connections: an excitatory
@@ -517,4 +634,3 @@ class Connection(nengo.config.SupportDefaultsMixin):
     @property
     def size_out(self):
         return self.post.size_in
-

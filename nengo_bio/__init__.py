@@ -18,12 +18,16 @@
 name = "nengo_bio"
 
 # Expose commonly used objects
-from .connection import Connection, NeuralSheetConnectivity
+from .connection import \
+    Connection, \
+    UnconstrainedConnectivity, \
+    ConstrainedConnectivity, \
+    SpatiallyConstrainedConnectivity
 from .ensemble import Ensemble
 from .common import Excitatory, Inhibitory
 from .config import set_defaults
+from .dists import NeuralSheetDist
 
 # Explicitly load the builder submodule to register the builder components
-from . import (
-	builder
-)
+from . import (builder)
+
