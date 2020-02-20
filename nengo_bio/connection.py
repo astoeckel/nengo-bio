@@ -333,7 +333,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
     sigma = NumberParam(
         name="sigma",
         low=0.0,
-        default=1.0,
+        default=0.25,
         low_open=True,
         readonly=True,
     )
@@ -342,7 +342,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
         name="projection",
         default=np.zeros((0, )),
         optional=True,
-        shape=('*'),
+        shape=('*', '*'),
         readonly=True,
     )
 
@@ -355,8 +355,13 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
 
     def get_probabilities(self, n_pre, n_post, pre_obj, post_obj, data):
         # Fetch the neuron locations
-        xs_pre = data[pre_obj].locations
-        xs_post = data[post_obj].locations
+        xs_pre, xs_post = None, None
+
+        # If the "locations" attribute is set
+        if (pre_obj in data) and hasattr(data[pre_obj], 'locations'):
+            xs_pre = data[pre_obj].locations
+        if (post_obj in data) and hasattr(data[post_obj], 'locations'):
+            xs_post = data[post_obj].locations
 
         # We cannot compute connectivity constraints if the locations are not
         # defined -- just use uniform connection probabilities (by returning
@@ -389,7 +394,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
         # Project the locations onto the minimum dimensionality
         d_min, d_max = min(d_pre, d_post), max(d_pre, d_post)
         P = np.eye(d_min,
-                   d_max) if self.projection.size == 0 else self.projection
+                   d_max) if self.projection is None else self.projection
 
         # Make sure the projection vector has the correct size
         if (P.shape[0] != d_min and (d_min != d_max)) or (P.shape[1] != d_max):
@@ -404,8 +409,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
             xs_post = xs_post @ P.T
 
         # Compute the squared distance
-        dists = np.sum(np.square(xs_pre[None, :] - xs_post[:, None]), axis=-1)
-        print(dists.shape)
+        dists = np.sum(np.square(xs_pre[:, None] - xs_post[None, :]), axis=-1)
 
         # Apply exponential falloff
         return np.exp(-dists / np.square(self.sigma))
@@ -414,7 +418,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
                  convergence=None,
                  divergence=None,
                  probabilities=None,
-                 sigma=1.0,
+                 sigma=0.25,
                  projection=None):
 
         # Call the inherited constructor
@@ -424,8 +428,10 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
         self.sigma = sigma
 
         # Copy the projection parameter
-        if probabilities is None:
+        self.projection = projection
 
+        # Copy the probabilities
+        if probabilities is None:
             def get_probabilities_wrapper(*args, **kwargs):
                 return self.get_probabilities(*args, **kwargs)
 

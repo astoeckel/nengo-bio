@@ -281,14 +281,14 @@ class LIF(MultiChannelNeuronType):
                 out, [
                     GaussianSource(
                         seed=4902 + idx,
-                        mu=in_exc,
-                        sigma=in_exc * 0.2,
+                        mu=in_exc * 0.95,
+                        sigma=in_exc * 0.5,
                         tau=5e-3,
                         offs=0.0),
                     GaussianSource(
                         seed=5821 + 7 * idx,
-                        mu=in_inh,
-                        sigma=in_inh * 0.2,
+                        mu=in_inh * 0.95,
+                        sigma=in_inh * 0.5,
                         tau=5e-3,
                         offs=0.0),
                 ])

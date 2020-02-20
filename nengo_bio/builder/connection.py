@@ -173,7 +173,7 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
     n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
 
     # Create the connectivity matrix
-    connectivity = np.empty((2, n_post, n_pre), dtype=np.bool)
+    connectivity = np.empty((2, n_pre, n_post), dtype=np.bool)
 
     # Iterate over all pre-ensembles in the multi-ensemble
     arr_ens, arr_ns, _ = conn.pre_obj.flatten()
@@ -205,9 +205,9 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
         # If the connectivity descriptor returns "None", just build all-to-all
         # connections
         if C is None:
-            connectivity[:, :, ns] = np.ones((2, n_post, ens.n_neurons))
+            connectivity[:, ns, :] = np.ones((2, ens.n_neurons, n_post))
         else:
-            connectivity[:, :, ns] = C
+            connectivity[:, ns, :] = C
 
     # Issue warnings for unused elements in the connectivity dictionary
     if isinstance(conn.connectivity, dict):
@@ -248,12 +248,12 @@ def build_default_connectivity(model, cty, pre_obj, post_obj, rng):
 
     # Fetch the constructed pre object
     built_pre_obj = model.params[pre_obj]
-    connectivity = np.zeros((2, n_post, n_pre), dtype=np.bool)
+    connectivity = np.zeros((2, n_pre, n_post), dtype=np.bool)
     for i, type_ in enumerate((Excitatory, Inhibitory)):
         if hasattr(built_pre_obj, "synapse_types"):
-            connectivity[i] = built_pre_obj.synapse_types[type_][None, :]
+            connectivity[i] = built_pre_obj.synapse_types[type_][:, None]
         else:
-            connectivity[i] = np.ones((n_post, n_pre), dtype=np.bool)
+            connectivity[i] = np.ones((n_pre, n_post), dtype=np.bool)
 
     return connectivity
 
@@ -308,13 +308,13 @@ def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
 
     # Restrict the convergence numbers
     if not n_cov is None:
-        apply_constraints(n_cov, cs, ps)
+        apply_constraints(n_cov,
+                          np.transpose(cs, (0, 2, 1)),
+                          None if ps is None else ps.T)
 
     # Restrict the divergence numbers
     if not n_div is None:
-        apply_constraints(n_div,
-                          np.transpose(cs, (0, 2, 1)),
-                          None if ps is None else ps.T)
+        apply_constraints(n_div, cs, ps)
 
     return cs
 

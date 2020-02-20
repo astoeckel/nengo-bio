@@ -21,6 +21,7 @@ name = "nengo_bio"
 from .connection import \
     Connection, \
     UnconstrainedConnectivity, \
+    DefaultConnectivity, \
     ConstrainedConnectivity, \
     SpatiallyConstrainedConnectivity
 from .ensemble import Ensemble
