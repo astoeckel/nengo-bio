@@ -211,25 +211,17 @@ def solve_weights_qp(A,
     # Step 2: Assemble the QP matrices
     #
 
-    # We need balance the re-weight error for the super- (valid) and
-    # sub-threshold (invalid) constraints. This is done by dividing by the
-    # number of valid/invalid constraints. We need to multiply with the number
-    # of constraints since the regularisation factor has been chosen in such a
-    # way that the errors are implicitly divided by the number of constraints.
-    m1 = np.sqrt(n_cstr / max(1, n_cstr_valid))
-    m2 = np.sqrt(n_cstr / max(1, n_cstr_invalid))
-
     # Copy the valid constraints to Aext
     Aext = np.zeros((a3, n_vars_total))
     bext = np.zeros(a3)
-    Aext[a0:a1, v0:v1] = A[valid] * m1
-    bext[a0:a1] = b[valid] * m1
+    Aext[a0:a1, v0:v1] = A[valid]
+    bext[a0:a1] = b[valid]
 
     # Regularise the weights
     Aext[a1:a2, v0:v1] = np.eye(n_vars) * np.sqrt(reg)
 
     # Penalise slack variables
-    Aext[a2:a3, v1:v2] = np.eye(n_slack) * m2
+    Aext[a2:a3, v1:v2] = np.eye(n_slack)
 
     # Form the inequality constraints for the matrices G and h
     G = np.zeros((g2, n_vars_total))
