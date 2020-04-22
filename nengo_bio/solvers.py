@@ -35,7 +35,8 @@ def _get_solve_qp_instance():
             bioneuronqp.solve(
                 np.ones((10, 5)),
                 np.ones((10, 3)),
-                np.array([0.0, 1.0, -1.0, 1.0, 0.0, 0.0]))
+                np.array([0.0, 1.0, -1.0, 1.0, 0.0, 0.0]),
+                n_threads=1)
             _solve_qp = bioneuronqp.solve
             return _solve_qp
         except OSError:
