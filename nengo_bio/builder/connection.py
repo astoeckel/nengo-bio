@@ -167,7 +167,34 @@ def get_multi_ensemble_synapse_types(model, mens):
     return synapse_types
 
 
-def get_connection_matrix(model, conn, synapse_types, rng=np.random):
+def get_connection_matrix(model, conn, synapse_types, final=True,
+                          ps_ext=None, rng=np.random):
+    """
+    Computes the connectivity of all neurons contained in the connection "conn".
+    In particular, this determines which target channel of each post-neuron a
+    pre-neuron is connected to.
+
+    model:
+        The builder instance for which the connection matrix should be computed.
+    conn:
+        The connection for which the connectivity should be computed. This
+        should be a nengo_bio.Connection object.
+    synapse_types:
+        A list of SynapseType instances describing each post-population synapse.
+    final:
+        If true, the resulting connectivity matrix is stored in the connectivity
+        cache. Nengo-bio may try different random connectivities before settling
+        on a final connectivity.
+    ps_ext:
+        Is an external matrix of connection probabilities. The matrix should
+        have the same shape as the returned connectivity matrix (i.e.,
+        n_synapses x n_pre x n_post). This is used to iteratively refine the
+        neural connectivity. If set to "None", the matrix is treated as being
+        all ones.
+    rng:
+        Random number generator used to determine the connectivity.
+    """
+
     # Create the empty synapse type map
     pre_obj, post_obj = conn.pre_obj, conn.post_obj
     n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
@@ -178,6 +205,12 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
     # Iterate over all pre-ensembles in the multi-ensemble
     arr_ens, arr_ns, _ = conn.pre_obj.flatten()
     connectivity_cache = {}
+
+    # Flag used to encode whether all connectivity constraints are
+    # deterministic. In this case, there is no need to run the connectivity
+    # refinement algorithm.
+    all_are_deterministic = True
+
     for ens, ns in zip(arr_ens, arr_ns):
         # If the connectivity object is a dictionary, check whether an entry for
         # exactly this connection exists
@@ -193,14 +226,35 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
         if connectivity_descr is None:
             connectivity_descr = DefaultConnectivity()
 
+        # If the connectivity descriptor is derived from the
+        # "ConstrainedConnectivity" class, then all connectivities are
+        # deterministic -- in this case, there is no need to run the
+        # connectivity refinement algorithm
+        is_deterministic = not isinstance(connectivity_descr,
+                                          ConstrainedConnectivity)
+        all_are_deterministic = all_are_deterministic and is_deterministic
+
         # Build the connectivity matrix according to the connectivity
         # descriptor. Use already computed connectivity from the connectivity
         # cache if the same neurons are connected multiple times.
         if connectivity_key in connectivity_cache:
             C = connectivity_cache[connectivity_key]
         else:
-            C = model.build(connectivity_descr, ens, post_obj, rng)
-            connectivity_cache[connectivity_key] = C
+            # Select the correct slice of "ps_ext", if given and this connection
+            # is not fully deterministic
+            if (ps_ext is None) or is_deterministic:
+                ps_ext_slice = None
+            else:
+                ps_ext_slice = ps_ext[ns, :]
+
+            # Compute the actual connectivity matrix
+            C = model.build(connectivity_descr, ens, post_obj, ps_ext_slice, rng)
+
+            # Only store the computed matrix C in the connectivity cache if the
+            # "final" flag is set to true or the connectivity for this ensemble
+            # is fully deterministic.
+            if final or is_deterministic:
+                connectivity_cache[connectivity_key] = C
 
         # If the connectivity descriptor returns "None", just build all-to-all
         # connections
@@ -218,7 +272,7 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
                         "Connectivity descriptor ({}, {}) not used".format(
                             pre_obj, post_obj)))
 
-    return connectivity
+    return connectivity, all_are_deterministic
 
 
 def remove_bias_current(model, ens):
@@ -236,13 +290,13 @@ def remove_bias_current(model, ens):
 
 
 @nengo.builder.Builder.register(UnconstrainedConnectivity)
-def build_unconstrained_connectivity(model, cty, pre_obj, post_obj, rng):
+def build_unconstrained_connectivity(model, cty, pre_obj, post_obj, ps_ext, rng):
     # Put no constraints on the connections whatsoever
     return None
 
 
 @nengo.builder.Builder.register(DefaultConnectivity)
-def build_default_connectivity(model, cty, pre_obj, post_obj, rng):
+def build_default_connectivity(model, cty, pre_obj, post_obj, ps_ext, rng):
     # Fetch the number of pre- and post neurons
     n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
 
@@ -259,14 +313,24 @@ def build_default_connectivity(model, cty, pre_obj, post_obj, rng):
 
 
 @nengo.builder.Builder.register(ConstrainedConnectivity)
-def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
+def build_constrained_connectivity(model, cty, pre_obj, post_obj, ps_ext, rng):
     # Create some convenient aliases
     n_cov, n_div = cty.convergence, cty.divergence
     n_pre, n_post = pre_obj.n_neurons, post_obj.n_neurons
 
     # Create the default connectivity matrix
     cs = build_default_connectivity(model, cty,
-                                    pre_obj, post_obj, rng)
+                                    pre_obj, post_obj, ps_ext, rng)
+
+    # Function used to check the shape of a probability matrix
+    def assert_ps_shape(ps):
+        if ps is None:
+            return
+        if ((ps.ndim != 2) or (ps.shape[0] != n_pre) or (ps.shape[1] != n_post)):
+            raise ValueError(
+                "Invalid connection probability matrix. Expected matrix of "
+                "shape {} x {} (n_pre x n_post), but got {}".format(
+                n_pre, n_post, " x ".join(map(str, ps.shape))))
 
     # Fetch the connection probabilities
     ps = None
@@ -276,10 +340,16 @@ def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
         elif is_array_like(cty.probabilities):
             ps = cty.probabilities
 
-        if (not ps is None) and ((ps.ndim != 2) or (ps.shape[0] != n_post) or (ps.shape[1] != n_pre)):
-            raise ValueError(
-                "Invalid connection probability matrix. Expected matrix of "
-                "shape {} x {} (n_post x n_pre)".format(n_post, n_pre))
+    # Make sure ps and ps_ext have the right shapes
+    assert_ps_shape(ps)
+    assert_ps_shape(ps_ext)
+
+    # Apply ps_ext to ps
+    if not ps_ext is None:
+        if ps is None:
+            ps = ps_ext # Simply use ps_ext as ps
+        else:
+            ps *= ps_ext # Multiply the probabilities with ps_ext
 
     # Helper function used for restricting both the convergence and divergence
     def apply_constraints(n, cs, ps):
@@ -292,11 +362,18 @@ def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
             idcs_syn, idcs = np.where(cs[:, i, :] != 0)
             n_available = min(n, idcs.size)
 
-            # If the "p" matrix is given, compute the probabilities for any of
+            # If the "ps" matrix is given, compute the probabilities for any of
             # these synapses to be connected
             probabilities = None
             if not ps is None:
-                probabilities = ps[i, idcs] / np.sum(ps[i, idcs])
+                p_sum = np.sum(ps[i, idcs])
+                if p_sum > 0.0:
+                    probabilities = ps[i, idcs] / p_sum
+                    n_available = min(n_available, np.sum(ps[i, idcs] > 0))
+                else:
+                    # The probability sum is zero, abort
+                    cs[:, i, :] = False
+                    continue
 
             # Select the pre-synapses
             sel = np.random.choice(np.arange(idcs.size, dtype=np.int),
@@ -362,20 +439,94 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if conn.decode_bias:
             target_currents += bias
 
-        # Construct the connection matrix for this connection
-        connectivity = get_connection_matrix(
-            model, conn, synapse_types, rng)
+        # Perform the refinement steps specified in the connection
+        ps_ext, n_con_success, n_con_trials = None, None, None
+        n_it = max(1, 1 if conn.refine is None else (conn.refine + 1))
+        for i_refine in range(n_it):
+            # Determine whether this is the final refinement step
+            final = (i_refine + 1) == n_it
 
-        # LIF neuron model parameters
-        tuning = None
-        if hasattr(built_post_ens, 'tuning'):
-            tuning = built_post_ens.tuning
+            # Construct the connection matrix for this connection
+            connectivity, all_are_deterministic = get_connection_matrix(
+                model=model,
+                conn=conn,
+                synapse_types=synapse_types,
+                final=final,
+                ps_ext=ps_ext,
+                rng=rng)
 
-        i_th = 1.0
-        if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
-            i_th = conn.post_obj.neuron_type.threshold_current
-        WE, WI = solver(activities, target_currents, connectivity, i_th,
-                        tuning, rng)
+            # LIF neuron model parameters
+            tuning = None
+            if hasattr(built_post_ens, 'tuning'):
+                tuning = built_post_ens.tuning
+
+            i_th = 1.0
+            if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
+                i_th = conn.post_obj.neuron_type.threshold_current
+            WE, WI = solver(activities, target_currents, connectivity, i_th,
+                            tuning, rng)
+
+            # No need to do refinement if all connections are deterministic or
+            # we are in the final refinement step
+            if all_are_deterministic or final:
+                break
+
+            # Perform a refinement step. First, create the matrics n_con_success
+            # and n_con_trials to track the number of successful times a
+            # particular weight was used
+            n_pre, n_post = WE.shape
+            if i_refine == 0:
+                n_con_success = np.zeros((n_pre, n_post), dtype=np.int16)
+                n_con_trials = np.zeros((n_pre, n_post), dtype=np.int16)
+
+            # Second, make selecting neurons with low relative connection weight
+            # less probable. Do this for each individual post-neuron and synapse
+            # type.
+            WS = [WE, WI]
+            for i_post in range(n_post):
+                js_update = np.zeros(n_pre)
+                js_sel = np.zeros(n_pre, dtype=np.bool)
+                for i_synapse_type in range(2):
+                    # Fetch the connectivity for this post neuron and synapse
+                    # type. Do nothing if there were no connections made.
+                    con = connectivity[i_synapse_type, :, i_post]
+                    if np.sum(con) <= 1:
+                        continue
+
+                    # If we tried to use this neuron in a connection, increment
+                    # the trial count.
+                    n_con_trials[con, i_post] += 1
+
+                    # Compute the maximum current that can be injected by
+                    # the pre-neurons
+                    ws = np.abs(WS[i_synapse_type][con, i_post])
+                    A_max = np.max(np.abs(activities[:, con]), axis=0)
+                    js = ws * A_max
+
+                    # Count a neuron as being used "successfully" if the maximum
+                    # current injected by this neuron is greater than the
+                    # median.
+                    js_10 = np.percentile(js, 10)
+                    sel = np.argwhere(con)[js > js_10, 0]
+                    n_con_success[sel, i_post] += 1
+
+            # Sample the external probability matrix ps_ext from a beta
+            # distribution
+            if i_refine + 2 == n_it:
+                ps_ext = n_con_success + 0.1
+            else:
+                ps_ext = rng.beta(
+                    1 + n_con_success, # alpha
+                    1 + n_con_trials - n_con_success # beta
+                )
+
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(1, 3, figsize=(9, 3))
+            axs[0].imshow(n_con_success, vmin=0.0, vmax=None)
+            axs[1].imshow(n_con_trials, vmin=0.0, vmax=None)
+            axs[2].imshow(ps_ext, vmin=0.0, vmax=None)
+            plt.show(fig)
+            plt.close(fig)
 
         # If we're not targeting a MultiChannelNeuronType there really isn't
         # a distinction between excitatory and inhibitory input weights. Hence,

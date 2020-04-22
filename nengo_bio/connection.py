@@ -323,6 +323,7 @@ class ConstrainedConnectivity(Connectivity):
         self.probabilities = probabilities
 
 
+
 class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
     """
     Same as "ConstrainedConnectivity", but with a default callback for the
@@ -367,6 +368,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
         # defined -- just use uniform connection probabilities (by returning
         # "None")
         if (xs_pre is None) or (xs_post is None):
+               # TODO: Issue warning
             return None
 
         # Make sure the number of pre-neurons and the number of post-neurons
@@ -514,6 +516,8 @@ class Connection(nengo.config.SupportDefaultsMixin):
 
     connectivity = ConnectivityParam('connectivity')
 
+    refine = IntParam('refine', default=None, optional=True)
+
     _param_init_order = [
         'pre', 'post', 'synapse_exc', 'synapse_inh', 'function_info'
     ]
@@ -531,6 +535,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  n_eval_points=Default,
                  decode_bias=Default,
                  connectivity=Default,
+                 refine=Default,
                  label=Default,
                  seed=Default):
         super().__init__()
@@ -551,6 +556,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.transform = transform
         self.solver = solver
         self.connectivity = connectivity
+        self.refine = refine
 
         # For each pre object add two actual nengo connections: an excitatory
         # path and an inhibitory path
