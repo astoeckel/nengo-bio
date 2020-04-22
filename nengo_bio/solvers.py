@@ -105,7 +105,7 @@ class QPSolver(ExtendedSolver):
             ws = tuning
 
         # Determine the final regularisatio nparameter
-        reg = (self.reg * np.max(A))**2 * A.shape[1]
+        reg = (self.reg * np.max(A))**2
 
         # If subthreshold relaxation is switched off, set the spike threshold
         # to "None"
