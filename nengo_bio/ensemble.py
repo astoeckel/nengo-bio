@@ -18,7 +18,6 @@ import numpy as np
 import collections
 
 from nengo_bio.common import steal_param, Excitatory, Inhibitory
-from nengo_bio.dists import NeuralSheetDist
 
 import nengo.dists
 import nengo.ensemble
