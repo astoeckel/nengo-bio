@@ -508,7 +508,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                                                default=None,
                                                optional=True,
                                                sample_shape=('*', 'size_in'))
-    scale_eval_points = BoolParam('scale_eval_points', default=True)
+    scale_eval_points = BoolParam('scale_eval_points', default=False)
     n_eval_points = IntParam('n_eval_points', default=None, optional=True)
     decode_bias = BoolParam('decode_bias', default=True)
 
