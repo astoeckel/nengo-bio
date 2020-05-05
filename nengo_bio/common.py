@@ -34,6 +34,24 @@ class SynapseType:
     def __repr__(self):
         return self.name
 
+
+class BiasMode:
+    """
+    Type used to specify the connection bias mode.
+    """
+
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+
 Excitatory = SynapseType("excitatory")
 Inhibitory = SynapseType("inhibitory")
+
+Decode = BiasMode("decode")
+JBias = BiasMode("jbias")
+ExcJBias = BiasMode("exc_jbias")
+InhJBias = BiasMode("inh_jbias")
 

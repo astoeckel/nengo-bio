@@ -16,7 +16,15 @@
 
 import numpy as np
 
-from nengo_bio.common import steal_param, Excitatory, Inhibitory
+from nengo_bio.common import \
+    steal_param, \
+    BiasMode, \
+    Excitatory, \
+    Inhibitory, \
+    Decode, \
+    JBias, \
+    ExcJBias, \
+    InhJBias
 from nengo_bio.solvers import SolverWrapper, QPSolver
 from nengo_bio.internal.sequences import hilbert_curve
 
@@ -432,6 +440,7 @@ class SpatiallyConstrainedConnectivity(ConstrainedConnectivity):
 
         # Copy the probabilities
         if probabilities is None:
+
             def get_probabilities_wrapper(*args, **kwargs):
                 return self.get_probabilities(*args, **kwargs)
 
@@ -477,6 +486,36 @@ class ConnectivityParam(Parameter):
                 "(pre, post) tuples onto instances of the Connectivity class.")
 
 
+class BiasModeParam(Parameter):
+    """
+    The BiasModeParam class is used to specifiy the bias mode of the connection.
+    This can either be set to "decode", in which case the bias is decoded from
+    the pre-populations, "jbias", in which case the bias is artificially added
+    to each neuron, "exc_jbias", in which case excitatory bias currents are
+    artificially added to each neuron, or "inh_jbias" in which case inhibitory
+    bias currents are added to each neuron.
+    """
+    def __init__(self, name):
+        super().__init__(name, default=None, optional=True, readonly=False)
+
+    def coerce(self, instance, obj):
+        # Default to the "decode" bias mode
+        if obj is None:
+            obj = Decode
+
+        # Make sure that obj is indeed a bias mode
+        if (not isinstance(obj, BiasMode)):
+            raise ValueError(
+                "Given connection bias_mode must be a BiasMode instance")
+
+        # Make sure the bias_mode is valid
+        if (not ((obj is Decode) or (obj is JBias) or (obj is ExcJBias) or
+                 (obj is InhJBias))):
+            raise ValueError("Invalid bias mode instance.")
+
+        return obj
+
+
 # Nengo 2.8 compatibility
 if hasattr(nengo.connection, 'ConnectionTransformParam'):
     ConnectionTransformParam = nengo.connection.ConnectionTransformParam
@@ -510,7 +549,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                                                sample_shape=('*', 'size_in'))
     scale_eval_points = BoolParam('scale_eval_points', default=True)
     n_eval_points = IntParam('n_eval_points', default=None, optional=True)
-    decode_bias = BoolParam('decode_bias', default=True)
+    bias_mode = BiasModeParam('bias_mode')
 
     connectivity = ConnectivityParam('connectivity')
 
@@ -529,7 +568,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
                  eval_points=Default,
                  scale_eval_points=Default,
                  n_eval_points=Default,
-                 decode_bias=Default,
+                 bias_mode=Default,
                  connectivity=Default,
                  label=Default,
                  seed=Default):
@@ -546,7 +585,7 @@ class Connection(nengo.config.SupportDefaultsMixin):
         self.eval_points = eval_points
         self.scale_eval_points = scale_eval_points
         self.n_eval_points = n_eval_points
-        self.decode_bias = decode_bias
+        self.bias_mode = bias_mode
         self.function_info = function
         self.transform = transform
         self.solver = solver
@@ -640,3 +679,4 @@ class Connection(nengo.config.SupportDefaultsMixin):
     @property
     def size_out(self):
         return self.post.size_in
+

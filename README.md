@@ -68,13 +68,14 @@ ens_mix = bio.Ensemble(n_neurons=101, dimensions=1, p_inh=0.2)
 
 ### The `bio.Connection` class
 
-A `bio.Connection` connection connects *n*-pre ensembles to a single target ensemble. It will automatically account for the synapse type assigned to each neuron.
+A `bio.Connection` connection connects *n*-pre ensembles to a single target ensemble. Per default, it will automatically account for the excitatoriness/inhibitoriness of the pre-neuron population.
 
 ### Notable Parameters
 
 * `pre`: This can be either a single pre-population or a tuple of pre-populations. The dimensions of the values represented by the pre-populations will be stacked.
 
-* `decode_bias` (default `True`): if `True` the post-neuron bias current will be decoded from the pre-population instead of being assumed constant. Set this to `False` for any but the first `bio.connection` targeting the same post population.
+* `bias_mode` (default `bio.Decode`): If set to `bio.Decode`, the post-neuron bias current will be decoded from the pre-population instead of being assumed to be an intrinsic property of each neuron. In constrast, a value of `bio.JBias` will disable bias current decoding altogether (this is the default Nengo behaviour). A value of `bio.ExcJBias` will only decode inhibitory biases (excitatory biases are assumed to be an intrinsic part of the neuron ensemble), a value of `bio.InhJBias` will decode excitatory biases (inhibitory biases are an intrinsic part of the neuron ensemble).  
+**Note:** If multiple connection objects target the same post-object (not recommended, try to use a single connection per post-object in your network), make sure set this to `bio.JBias` for any but the first `bio.connection` targeting the same post population.
 
 * `solver` (default `QPSolver()`): an `ExtendedSolver` instance from `nengo_bio.solvers`. `ExtendedSolvers` can solve for currents and take neuron parameters into account.
 

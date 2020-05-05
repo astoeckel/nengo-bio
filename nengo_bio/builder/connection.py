@@ -18,7 +18,13 @@ import collections
 import warnings
 import numpy as np
 
-from nengo_bio.common import Excitatory, Inhibitory
+from nengo_bio.common import \
+    Excitatory, \
+    Inhibitory, \
+    Decode, \
+    JBias, \
+    ExcJBias, \
+    InhJBias
 from nengo_bio.connection import \
     ConnectionPart, \
     Connection, \
@@ -235,6 +241,14 @@ def remove_bias_current(model, ens):
                 model.add_op((Reset(sig_post_in)))
 
 
+def override_intrinsic_bias(model, ens, tar):
+    if not 'bias' in model.sig[ens.neurons]:
+        return
+
+    sig_post_bias = model.sig[ens.neurons]['bias']
+    sig_post_bias.initial_value[...] = tar
+
+
 @nengo.builder.Builder.register(UnconstrainedConnectivity)
 def build_unconstrained_connectivity(model, cty, pre_obj, post_obj, rng):
     # Put no constraints on the connections whatsoever
@@ -326,13 +340,31 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
 
     # If the high-level connection object has not been built, build it
     if not conn in model.params:
-        # Remove the bias current from the target ensemble
-        if conn.decode_bias:
+        # For the target population, fetch the gains and biases
+        built_post_ens = model.params[conn.post_obj]
+        encoders = built_post_ens.encoders / conn.post.radius
+        gain = built_post_ens.gain
+        bias = built_post_ens.bias
+        intrinsic_bias = np.copy(bias)
+
+        # Remove the bias current from the target ensemble, if the bias mode
+        # is set to "Decode". This is the only valid setting for multi-channel
+        # post-neurons.
+        if conn.bias_mode is Decode:
             remove_bias_current(model, conn.post_obj)
+            intrinsic_bias = np.zeros_like(intrinsic_bias)
         elif isinstance(conn.post_obj.neuron_type, MultiChannelNeuronType):
             raise BuildError(
-                "decode_bias=False on connection {} invalid for post objects "
+                "bias_mode != Decode on connection {} invalid for post objects "
                 "with multi-channel neurons.".format(conn))
+
+        # Modify the bias currents if the bias mode is ExcJBias or InhJBias
+        if conn.bias_mode is ExcJBias:
+            intrinsic_bias = np.maximum(0, intrinsic_bias)
+            override_intrinsic_bias(model, conn.post_obj, intrinsic_bias)
+        elif conn.bias_mode is InhJBias:
+            intrinsic_bias = np.minimum(0, intrinsic_bias)
+            override_intrinsic_bias(model, conn.post_obj, intrinsic_bias)
 
         # Fetch the evaluation points, activites, and synapse types for the
         # entire MultiEnsemble
@@ -351,16 +383,11 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
             transform = conn.transform
         targets = np.dot(targets, transform.T)
 
-        # For the target population, fetch the gains and biases
-        built_post_ens = model.params[conn.post_obj]
-        encoders = built_post_ens.encoders / conn.post.radius
-        gain = built_post_ens.gain
-        bias = built_post_ens.bias
-
-        # Compute the target currents
+        # Compute the target currents. We need to add the difference between the
+        # desired target currents, and the bias currents intrinsic to each
+        # neuron
         target_currents = (targets @ encoders.T) * gain
-        if conn.decode_bias:
-            target_currents += bias
+        target_currents += bias - intrinsic_bias
 
         # Construct the connection matrix for this connection
         connectivity = get_connection_matrix(

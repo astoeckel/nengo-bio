@@ -25,7 +25,7 @@ from .connection import \
     ConstrainedConnectivity, \
     SpatiallyConstrainedConnectivity
 from .ensemble import Ensemble
-from .common import Excitatory, Inhibitory
+from .common import Decode, JBias, ExcJBias, InhJBias, Excitatory, Inhibitory
 from .config import set_defaults
 from .dists import NeuralSheetDist
 
