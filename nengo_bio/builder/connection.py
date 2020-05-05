@@ -400,7 +400,7 @@ def build_solver(model, solver, _, rng, *args, **kwargs):
         if hasattr(built_post_ens, 'tuning'):
             tuning = built_post_ens.tuning
 
-        i_th = 1.0
+        i_th = 0.0
         if hasattr(conn.post_obj.neuron_type, 'threshold_current'):
             i_th = conn.post_obj.neuron_type.threshold_current
         WE, WI = solver(activities, target_currents, connectivity, i_th,
