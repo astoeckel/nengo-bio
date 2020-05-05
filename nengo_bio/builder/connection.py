@@ -246,7 +246,9 @@ def override_intrinsic_bias(model, ens, tar):
         return
 
     sig_post_bias = model.sig[ens.neurons]['bias']
-    sig_post_bias.initial_value[...] = tar
+    sig_post_bias._initial_value.setflags(write=True)
+    sig_post_bias._initial_value[...] = tar
+    sig_post_bias._initial_value.setflags(write=False)
 
 
 @nengo.builder.Builder.register(UnconstrainedConnectivity)
