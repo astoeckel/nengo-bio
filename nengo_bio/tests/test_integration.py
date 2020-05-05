@@ -101,6 +101,39 @@ def test_communication_channel_with_pre_radius():
     assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.25
 
 
+def _test_communication_channel_bias_modes(bias_mode):
+    f1 = lambda t: np.sin(t)
+    with nengo.Network(seed=5892) as model:
+        inp_a = nengo.Node(f1)
+
+        ens_a = bio.Ensemble(n_neurons=101, dimensions=1, p_exc=0.5)
+        ens_b = bio.Ensemble(n_neurons=102, dimensions=1)
+
+        nengo.Connection(inp_a, ens_a)
+
+        bio.Connection(ens_a, ens_b, bias_mode=bias_mode)
+
+        prb_output = nengo.Probe(ens_b, synapse=PROBE_SYNAPSE)
+
+    assert run_and_compute_relative_rmse(model, prb_output, (f1,)) < 0.1
+
+
+def test_communication_channel_bias_mode_decode():
+    _test_communication_channel_bias_modes(bio.Decode)
+
+
+def test_communication_channel_bias_mode_jbias():
+    _test_communication_channel_bias_modes(bio.JBias)
+
+
+def test_communication_channel_bias_mode_exc_jbias():
+    _test_communication_channel_bias_modes(bio.ExcJBias)
+
+
+def test_communication_channel_bias_mode_inh_jbias():
+    _test_communication_channel_bias_modes(bio.InhJBias)
+
+
 def test_parisien():
     with nengo.Network(seed=5892) as model:
         inp_a = nengo.Node(lambda t: np.sin(t))
