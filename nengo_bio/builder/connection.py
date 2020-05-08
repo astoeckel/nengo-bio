@@ -221,8 +221,7 @@ def get_connection_matrix(model, conn, synapse_types, rng=np.random):
             if not key in connectivity_cache:
                 warnings.warn(
                     NengoWarning(
-                        "Connectivity descriptor ({}, {}) not used".format(
-                            pre_obj, post_obj)))
+                        "Connectivity descriptor {} not used".format(key)))
 
     return connectivity
 
