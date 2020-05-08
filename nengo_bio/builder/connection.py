@@ -292,10 +292,10 @@ def build_constrained_connectivity(model, cty, pre_obj, post_obj, rng):
         elif is_array_like(cty.probabilities):
             ps = cty.probabilities
 
-        if (not ps is None) and ((ps.ndim != 2) or (ps.shape[0] != n_post) or (ps.shape[1] != n_pre)):
+        if (not ps is None) and ((ps.ndim != 2) or (ps.shape[0] != n_pre) or (ps.shape[1] != n_post)):
             raise ValueError(
                 "Invalid connection probability matrix. Expected matrix of "
-                "shape {} x {} (n_post x n_pre)".format(n_post, n_pre))
+                "shape {} x {} (n_pre x n_post)".format(n_pre, n_post))
 
     # Helper function used for restricting both the convergence and divergence
     def apply_constraints(n, cs, ps):
