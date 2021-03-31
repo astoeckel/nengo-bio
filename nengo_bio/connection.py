@@ -27,8 +27,8 @@ from nengo_bio.common import \
     InhJBias
 from nengo_bio.solvers import SolverWrapper, QPSolver
 from nengo_bio.internal.sequences import hilbert_curve
+from nengo_bio.internal.numpy import is_array_like
 
-from nengo.utils.numpy import is_array_like
 from nengo.params import Parameter, BoolParam, IntParam, NumberParam, \
                          StringParam, NdarrayParam, Default, Unconfigurable, \
                          FrozenObject

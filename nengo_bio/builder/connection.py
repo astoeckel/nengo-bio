@@ -34,10 +34,10 @@ from nengo_bio.connection import \
     DefaultConnectivity
 from nengo_bio.solvers import SolverWrapper, ExtendedSolver
 from nengo_bio.neurons import MultiChannelNeuronType
+from nengo_bio.internal.numpy import is_array_like
 
 from nengo.exceptions import NengoWarning, BuildError
 from nengo.ensemble import Ensemble, Neurons
-from nengo.utils.numpy import is_array_like
 
 import nengo.builder
 from nengo.builder.operator import Copy, Reset
