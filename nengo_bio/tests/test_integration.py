@@ -155,7 +155,7 @@ def test_parisien():
         probe = nengo.Probe(ens_target, synapse=PROBE_SYNAPSE)
 
     assert run_and_compute_relative_rmse(
-        model, probe, (lambda t: np.sin(t)**2,)) < 0.25
+        model, probe, (lambda t: np.sin(t)**2,)) < 0.35
 
 
 def test_parisien_relax():
