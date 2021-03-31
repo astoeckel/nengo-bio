@@ -94,9 +94,13 @@ class DendriticParameters:
         return A_red, b_red
 
     def vEq_extreme(self, params_som=None):
-        """Returns the absolute minimum and maximum potentials reachable in each
-           compartment by setting a conductance input to infinity. Note that
-           current inputs will"""
+        """
+        Returns the absolute minimum and maximum potentials reachable in each
+        compartment by setting a conductance input to infinity. Note that
+        current inputs will cause the reachable potential to be set to
+        plus/minius infinity, since current-based inputs can be used to drive
+        the membrane potential to any value.
+        """
 
         # Initialize v_min and v_max to the resting potential
         A, b = self.C + np.diag(self.a), self.b
