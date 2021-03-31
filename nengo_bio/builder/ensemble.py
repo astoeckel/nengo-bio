@@ -50,6 +50,7 @@ class DummySignal(object):
 
         # Make nengo 2.8 happy
         self.initial_value = 0.0
+        self.is_view = False
 
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
