@@ -48,6 +48,9 @@ class DummySignal(object):
         # of this value.
         self.size = not_zero
 
+        # Make nengo 2.8 happy
+        self.initial_value = 0.0
+
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
 
