@@ -155,7 +155,7 @@ def test_parisien():
         probe = nengo.Probe(ens_target, synapse=PROBE_SYNAPSE)
 
     assert run_and_compute_relative_rmse(
-        model, probe, (lambda t: np.sin(t)**2,)) < 0.2
+        model, probe, (lambda t: np.sin(t)**2,)) < 0.25
 
 
 def test_parisien_relax():
@@ -203,4 +203,4 @@ def test_multi_channel_lif_communication_channel():
 
         prb_output = nengo.Probe(ens_c, synapse=PROBE_SYNAPSE)
 
-    assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.1
+    assert run_and_compute_relative_rmse(model, prb_output, (f1, f2)) < 0.25
