@@ -31,6 +31,22 @@ built_attrs = nengo.builder.ensemble.built_attrs + [
     "synapse_types", "locations", "tuning"
 ]
 
+class NotZero:
+    """
+    Comparing an instance of NotZero to 0 returns False. But you also can't do
+    anything else with this. This just exists to monkey patch around some
+    additional sanity checks added to nengo that we don't care about.
+    """
+    pass
+
+not_zero = NotZero()
+
+class DummySignal(object):
+    def __init__(self):
+        # Make line 235 of "get_prepost_signal" of nengo/builder/connection.py
+        # happy. Explicitly do not use an integer here to crash on actual uses
+        # of this value.
+        self.size = not_zero
 
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
@@ -116,10 +132,8 @@ def build_ensemble(model, ens):
 
     # Setup dummy input signals causing the original nengo code to work
     n_neurons, n_inputs = ens.n_neurons, ens.neuron_type.n_inputs
-    sig = nengo.builder.signal.Signal(np.zeros(0),
-                                      name="{}.neuron_in".format(ens))
-    model.sig[ens.neurons]['in'] = sig
-    model.sig[ens]['in'] = None
+    model.sig[ens.neurons]['in'] = DummySignal()
+    model.sig[ens]['in'] = DummySignal()
 
     # Setup the actual input signals
     for i in range(n_inputs):
