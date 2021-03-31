@@ -49,8 +49,9 @@ class DummySignal(object):
         self.size = not_zero
 
         # Make nengo 2.8 happy
-        self.initial_value = 0.0
+        self.initial_value = np.array(0.0)
         self.is_view = False
+        self.readonly = True
 
 class BuiltEnsemble(collections.namedtuple('BuiltEnsemble', built_attrs)):
     pass
