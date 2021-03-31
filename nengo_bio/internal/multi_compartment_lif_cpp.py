@@ -43,8 +43,8 @@ def _generate_simulator_cpp_code(f, params_som, params_den, dt=1e-3, ss=10):
     # Code below compares the result of _fmt to the string "0.0"
     assert _fmt(0) == "0.0" and _fmt(0.0) == "0.0"
 
-    def _generate_b_vec_entry(i, B, b_const):
-        res = _fmt(b_const[i])
+    def _generate_b_vec_entry(i, B, b):
+        res = _fmt(b[i])
         if res == "0.0":
             res = ""
         for k in range(B.shape[1]):
@@ -56,13 +56,13 @@ def _generate_simulator_cpp_code(f, params_som, params_den, dt=1e-3, ss=10):
             return "0.0"
         return res
 
-    def _generate_A_mat_entry(i, j, A, a_const, C):
+    def _generate_A_mat_entry(i, j, A, a, C):
         # Lookup off-diagonal entries in the C matrix
         if i != j:
             return _fmt(C[i, j])
 
         # Assemble diagonal entries according to the Aconst and A matrix
-        return _generate_b_vec_entry(i, A, a_const)
+        return _generate_b_vec_entry(i, A, a)
 
     # Handy aliases for params_som and params_den
     pS, pD = params_som, params_den
@@ -102,7 +102,7 @@ struct Parameters {
     for i in range(pD.n_comp):
         for j in range(pD.n_comp):
             f.write("            {}".format(
-                _generate_A_mat_entry(i, j, pD.A, pD.a_const, pD.C)))
+                _generate_A_mat_entry(i, j, pD.A, pD.a, pD.C)))
             if i != pD.n_comp - 1 or j != pD.n_comp - 1:
                 f.write(",")
             f.write("\n")
@@ -114,7 +114,7 @@ struct Parameters {
         return (VecB() <<\n""")
     for i in range(pD.n_comp):
         f.write("            {}".format(
-            _generate_b_vec_entry(i, pD.B, pD.b_const)))
+            _generate_b_vec_entry(i, pD.B, pD.b)))
         if i != pD.n_comp - 1:
             f.write(",")
         f.write("\n")

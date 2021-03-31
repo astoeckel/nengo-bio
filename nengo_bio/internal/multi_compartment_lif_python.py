@@ -35,8 +35,8 @@ def compile_simulator_python(params_som, params_den, dt=1e-3, ss=10):
                 x = np.array([xs[j][i] for j in range(self.n_inputs)])
 
                 # Compute the A-matrix and the b-vector for this sample
-                A = pD.C + np.diag(pD.a_const + pD.A @ x)
-                b = pD.b_const + pD.B @ x
+                A = pD.C + np.diag(pD.a + pD.A @ x)
+                b = pD.b + pD.B @ x
 
                 # Access to the current state: membrane poential and
                 # refractoriness

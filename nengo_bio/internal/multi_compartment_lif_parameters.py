@@ -43,24 +43,24 @@ class DendriticParameters:
     The DendriticParameters class describes the connectivity of the dendritic
     tree. In particular, the dynamics of the tree are given as
 
-    dv/dt = [C + diag(a_const + A @ x)] @ v + [b_const + B @ x]
+    dv/dt = [C + diag(a + A @ x)] @ v + [b + B @ x]
     """
 
-    def __init__(self, A, a_const, B, b_const, C):
+    def __init__(self, A, a, B, b, C):
         # Copy the matrices/vectors
         self.A = np.asarray(A, order='C', dtype=np.float64)
-        self.a_const = np.asarray(a_const, order='C', dtype=np.float64)
+        self.a = np.asarray(a, order='C', dtype=np.float64)
         self.B = np.asarray(B, order='C', dtype=np.float64)
-        self.b_const = np.asarray(b_const, order='C', dtype=np.float64)
+        self.b = np.asarray(b, order='C', dtype=np.float64)
         self.C = np.asarray(C, order='C', dtype=np.float64)
 
         # Make sure they have the right sizes
-        self.a_const = self.a_const.flatten()
-        self.b_const = self.b_const.flatten()
+        self.a = self.a.flatten()
+        self.b = self.b.flatten()
         assert self.A.ndim == self.B.ndim == self.C.ndim == 2
         assert self.C.shape[0] == self.C.shape[1]
-        assert self.a_const.size == self.A.shape[0] == self.C.shape[0]
-        assert self.b_const.size == self.B.shape[0] == self.C.shape[0]
+        assert self.a.size == self.A.shape[0] == self.C.shape[0]
+        assert self.b.size == self.B.shape[0] == self.C.shape[0]
         assert self.A.shape[1] == self.B.shape[1]
 
     @property
@@ -99,7 +99,7 @@ class DendriticParameters:
            current inputs will"""
 
         # Initialize v_min and v_max to the resting potential
-        A, b = self.C + np.diag(self.a_const), self.b_const
+        A, b = self.C + np.diag(self.a), self.b
         v_eq = -np.linalg.solve(A, b)
         v_min, v_max = v_eq, v_eq
 
@@ -152,14 +152,14 @@ class DendriticParameters:
         """
 
         A = np.array(((0., 0.), )) / C_som
-        a_const = np.array((-g_leak_som, )) / C_som
+        a = np.array((-g_leak_som, )) / C_som
 
         B = np.array(((input_mul, -input_mul), )) / C_som
-        b_const = np.array((E_rev_leak * g_leak_som, )) / C_som
+        b = np.array((E_rev_leak * g_leak_som, )) / C_som
 
         C = np.array(((0., ), )) / C_som
 
-        return DendriticParameters(A, a_const, B, b_const, C)
+        return DendriticParameters(A, a, B, b, C)
 
     @staticmethod
     def make_lif_cond(C_som=1e-9,
@@ -174,15 +174,15 @@ class DendriticParameters:
         """
 
         A = np.array(((-input_mul, -input_mul), )) / C_som
-        a_const = np.array((-g_leak_som, )) / C_som
+        a = np.array((-g_leak_som, )) / C_som
 
         B = np.array(
             ((input_mul * E_rev_exc, input_mul * E_rev_inh), )) / C_som
-        b_const = np.array((E_rev_leak * g_leak_som, )) / C_som
+        b = np.array((E_rev_leak * g_leak_som, )) / C_som
 
         C = np.array(((0., ), )) / C_som
 
-        return DendriticParameters(A, a_const, B, b_const, C)
+        return DendriticParameters(A, a, B, b, C)
 
     @staticmethod
     def make_two_comp_lif(C_som=1e-9,
@@ -202,16 +202,16 @@ class DendriticParameters:
         Cs = np.array((C_som, C_den))
 
         A = np.array(((0., 0.), (-input_mul, -input_mul))) / Cs[:, None]
-        a_const = np.array(
+        a = np.array(
             (-(g_leak_som + g_couple), -(g_leak_den + g_couple))) / Cs
 
         B = np.array(
             ((0., 0.),
              (input_mul * E_rev_exc, input_mul * E_rev_inh))) / Cs[:, None]
-        b_const = np.array(
+        b = np.array(
             (E_rev_leak * g_leak_som, E_rev_leak * g_leak_den)) / Cs
 
         C = np.array(((0., g_couple), (g_couple, 0.))) / Cs[:, None]
 
-        return DendriticParameters(A, a_const, B, b_const, C)
+        return DendriticParameters(A, a, B, b, C)
 

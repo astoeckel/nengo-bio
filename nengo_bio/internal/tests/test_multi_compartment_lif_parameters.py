@@ -34,9 +34,9 @@ def test_dendritic_parameters_two_comp_lif():
     assert params.n_comp == 2
     assert params.n_inputs == 2
     assert np.allclose(params.A, [[ 0.,  0.], [-1e9, -1e9]])
-    assert np.allclose(params.a_const, [-100., -100.])
+    assert np.allclose(params.a, [-100., -100.])
     assert np.allclose(params.B, [[ 0.,  0.], [0.02e9, -0.075e9]])
-    assert np.allclose(params.b_const, [-3.25, -3.25])
+    assert np.allclose(params.b, [-3.25, -3.25])
     assert np.allclose(params.C, [[0., 50.], [50., 0.]])
 
 def test_dendritic_parameters_two_comp_lif_veq_extreme():
