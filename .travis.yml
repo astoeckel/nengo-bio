@@ -13,8 +13,4 @@ install:
   - pip install --upgrade coveralls coverage
   - pip install .
 script:
-  - coverage run --source nengo_bio -m pytest nengo_bio/
-after_success:
-  - coverage combine
-  - coverage report
-  - coveralls
+  - pytest --noconftest
