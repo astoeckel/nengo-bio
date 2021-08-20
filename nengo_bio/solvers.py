@@ -30,23 +30,24 @@ def _get_solve_qp_instance():
 
     # Determine which library to use
     try:
-        import bioneuronqp
+        import nlif
         try:
-            bioneuronqp.solve(
+            solver = nlif.Solver()
+            solver.two_comp_solve(
                 np.ones((10, 5)),
                 np.ones((10, 3)),
                 np.array([0.0, 1.0, -1.0, 1.0, 0.0, 0.0]),
                 n_threads=1)
-            _solve_qp = bioneuronqp.solve
+            _solve_qp = solver.two_comp_solve
             return _solve_qp
         except OSError:
             warnings.warn(
-                "bioneuronqp is installed, but did not find libbioneuronqp.so; "
-                "make sure the library is located in your search path",
+                "libnlif is installed, but failed to solve a test problem; "
+                "please report this to the developers",
                 category=UserWarning)
     except ImportError:
         warnings.warn(
-            "Install the bioneuronqp library to make solving for weights "
+            "Install the libnlif library to make solving for weights "
             "faster",
             category=UserWarning)
         import nengo_bio.internal.qp_solver
